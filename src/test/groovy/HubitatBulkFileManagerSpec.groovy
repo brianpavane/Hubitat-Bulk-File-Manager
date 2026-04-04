@@ -555,6 +555,42 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  11b. buildSortHeaderLink / buildFileTable sorting headers
+    // ════════════════════════════════════════════════════════════════
+
+    def 'buildSortHeaderLink: active ascending sort shows up-arrow and toggles to desc'() {
+        when:
+        def html = app.buildSortHeaderLink('Name', 'name', 'docs/', 'name', 'asc')
+
+        then:
+        html.contains('Name &#9650;')
+        html.contains("?sortField=name&sortDir=desc&path=docs%2F")
+    }
+
+    def 'buildSortHeaderLink: inactive field links to ascending sort'() {
+        when:
+        def html = app.buildSortHeaderLink('Size', 'size', '', 'name', 'desc')
+
+        then:
+        html.contains('>Size</a>')
+        html.contains('?sortField=size&sortDir=asc')
+    }
+
+    def 'buildFileTable: renders clickable sort headers for name size and modified date'() {
+        given:
+        def files = [[name: 'docs/readme.txt', size: 512L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFileTable(files, 'docs/', 'name', 'asc')
+
+        then:
+        html.contains('?sortField=name&sortDir=desc&path=docs%2F')
+        html.contains('?sortField=size&sortDir=asc&path=docs%2F')
+        html.contains('?sortField=date&sortDir=asc&path=docs%2F')
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  12. getFileList
     // ════════════════════════════════════════════════════════════════
 

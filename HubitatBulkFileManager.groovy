@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.0
+ *  Version: 1.0.1
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -59,6 +59,16 @@ preferences {
 def mainPage() {
     // Apply navigation params supplied by href links
     if (params?.path != null) state.currentPath = params.path
+    if (params?.sortField != null) {
+        def requestedSortField = params.sortField.toString()
+        app.updateSetting("sortField", [type: "enum", value: requestedSortField])
+        settings.sortField = requestedSortField
+    }
+    if (params?.sortDir != null) {
+        def requestedSortDir = params.sortDir.toString()
+        app.updateSetting("sortDir", [type: "enum", value: requestedSortDir])
+        settings.sortDir = requestedSortDir
+    }
 
     def allFiles    = getFileList()
     def currentPath = (state.currentPath ?: "").toString()
@@ -160,7 +170,7 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
 
         // ── File listing table (display only) ─────────────────────────
         section("Files") {
-            paragraph buildFileTable(files, currentPath)
+            paragraph buildFileTable(files, currentPath, sortField, sortDir)
         }
 
         // ── Selection input ────────────────────────────────────────────
@@ -738,7 +748,7 @@ def buildBreadcrumb(String path) {
  * Renders the file listing as an HTML table (display only — selection
  * is handled separately by the enum input below the table).
  */
-def buildFileTable(List files, String currentPath) {
+def buildFileTable(List files, String currentPath, String sortField = "name", String sortDir = "asc") {
     if (files.isEmpty()) {
         return "<i style='color:#999;font-size:13px;'>No files in this location.</i>"
     }
@@ -751,11 +761,16 @@ def buildFileTable(List files, String currentPath) {
 .fmtbl .sz{text-align:right;}
 .fmtbl .dt{color:#888;}
 .fmtbl .mt{color:#aaa;font-size:11px;}
+.fmtbl th a{color:#eee;text-decoration:none;display:block;}
+.fmtbl th a:hover{text-decoration:underline;}
 </style>
 <table class='fmtbl'>
 <thead><tr>
-  <th>#</th><th>Name</th><th>MIME Type</th>
-  <th class='sz'>Size</th><th>Modified</th>
+  <th>#</th>
+  <th>${buildSortHeaderLink("Name", "name", currentPath, sortField, sortDir)}</th>
+  <th>MIME Type</th>
+  <th class='sz'>${buildSortHeaderLink("Size", "size", currentPath, sortField, sortDir)}</th>
+  <th>${buildSortHeaderLink("Modified", "date", currentPath, sortField, sortDir)}</th>
 </tr></thead><tbody>""")
 
     files.eachWithIndex { f, i ->
@@ -770,6 +785,15 @@ def buildFileTable(List files, String currentPath) {
     }
     sb.append("</tbody></table>")
     return sb.toString()
+}
+
+def buildSortHeaderLink(String label, String field, String currentPath,
+                        String activeSortField = "name", String activeSortDir = "asc") {
+    def nextDir   = (activeSortField == field && activeSortDir == "asc") ? "desc" : "asc"
+    def indicator = (activeSortField == field) ? (activeSortDir == "asc" ? " &#9650;" : " &#9660;") : ""
+    def pathPart  = currentPath ? "&path=${urlEncode(currentPath)}" : ""
+    return "<a href='?sortField=${urlEncode(field)}&sortDir=${urlEncode(nextDir)}${pathPart}'>" +
+           "${escapeHtml(label)}${indicator}</a>"
 }
 
 /**
@@ -863,6 +887,10 @@ def getFileIcon(String mimeType) {
 
 def escapeHtml(String s) {
     s?.replace("&", "&amp;")?.replace("<", "&lt;")?.replace(">", "&gt;") ?: ""
+}
+
+def urlEncode(String s) {
+    java.net.URLEncoder.encode(s ?: "", "UTF-8").replace("+", "%20")
 }
 
 def getHubBaseUrl() {
