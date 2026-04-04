@@ -231,7 +231,7 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
             }
             section("You are about to permanently delete ${toDelete.size()} item(s):") {
                 paragraph "<ul style='margin:4px 0;font-size:13px;'>" +
-                          toDelete.collect { "<li>${it}</li>" }.join("") +
+                          toDelete.collect { "<li>${escapeHtml(it?.toString())}</li>" }.join("") +
                           "</ul><br><b style='color:#c0392b;'>This action cannot be undone.</b>"
             }
             section {
@@ -727,7 +727,7 @@ def buildBreadcrumb(String path) {
     sb.append("&#128194; <b>/local</b>")
     if (path) {
         path.replaceAll('/+$', '').tokenize("/").each { part ->
-            sb.append(" <span style='color:#aaa;'>&#8250;</span> <b>${part}</b>")
+            sb.append(" <span style='color:#aaa;'>&#8250;</span> <b>${escapeHtml(part)}</b>")
         }
     }
     sb.append("</div>")
