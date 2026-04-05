@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.5] — 2026-04-04
+
+### Changed
+- File listing now probes Hubitat File Manager on both port `8080` and port `80`
+- Accepted file-manager response shapes expanded to support `files`, `fileList`, `name`, `fileName`, `date`, and `lastModified`
+- Main page now shows a diagnostic banner confirming which file-manager endpoint worked or why listing failed
+- Spock test suite updated to 138 tests, 0 failures
+
 ## [1.0.4] — 2026-04-04
 
 ### Added
@@ -75,10 +83,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - This project is a single-file Hubitat Groovy app; there is no `package.json`.  
-  Version is tracked in the file header (`Version: 1.0.3`) and in this changelog.
+  Version is tracked in the file header (`Version: 1.0.5`) and in this changelog.
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.5]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.5
 [1.0.4]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.4
 [1.0.3]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.3
 [1.0.2]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.2

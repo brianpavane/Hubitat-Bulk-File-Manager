@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.4  
+**Version:** 1.0.5  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -221,6 +221,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.5 | 2026-04-04 | Added dual-port file-manager probing and clearer file-list diagnostics |
 | 1.0.4 | 2026-04-04 | Finder-style flat listing, version display in all pages, zero-config install, removed virtual-directory code |
 | 1.0.3 | 2026-04-04 | Updated README GitHub URLs to use the correct `brianpavane` username |
 | 1.0.2 | 2026-04-04 | Refactored main view into an Explorer-style browser table with folders and files shown together |

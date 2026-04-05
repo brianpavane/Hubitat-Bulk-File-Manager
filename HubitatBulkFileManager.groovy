@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.4
+ *  Version: 1.0.5
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -53,7 +53,7 @@ preferences {
 // ────────────────────────────────────────────────────────────────
 
 def mainPage() {
-    def version   = "1.0.4"
+    def version   = "1.0.5"
     def allFiles  = getFileList()
     def sortField = (settings.sortField  ?: "name").toString()
     def sortDir   = (settings.sortDir    ?: "asc").toString()
@@ -75,6 +75,16 @@ def mainPage() {
                 paragraph """<div style="padding:10px 14px;border-left:5px solid ${color};\
 background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:13px;">\
 ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
+            }
+        }
+
+        if (state.fileListStatus?.message) {
+            def s = state.fileListStatus
+            def color = s.errors ? "#c0392b" : "#2c7a7b"
+            section {
+                paragraph """<div style="padding:8px 12px;border-left:5px solid ${color};\
+background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555;">\
+&#128421;&nbsp;${escapeHtml(s.message)}</div>"""
             }
         }
 
@@ -168,7 +178,7 @@ def confirmDeletePage() {
     def toDelete  = (settings.selectedFiles ?: []) as List
     def completed = state.deleteResult != null
 
-    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.4",
+    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.5",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -216,7 +226,7 @@ def destinationPickerPage() {
     def completed = state.opResult != null
 
     dynamicPage(name: "destinationPickerPage",
-                title: "${op.capitalize()} Files  \u2022  v1.0.4",
+                title: "${op.capitalize()} Files  \u2022  v1.0.5",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -258,7 +268,7 @@ any <code>/</code> in the name is part of the filename.</small>"""
 // ────────────────────────────────────────────────────────────────
 
 def settingsPage() {
-    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.4",
+    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.5",
                 install: false, uninstall: false) {
 
         section("Hub Connection") {
@@ -334,12 +344,12 @@ def appButtonHandler(String btn) {
 // ════════════════════════════════════════════════════════════════
 
 def installed() {
-    log.info "Hubitat Bulk File Manager v1.0.4 installed"
+    log.info "Hubitat Bulk File Manager v1.0.5 installed"
     initialize()
 }
 
 def updated() {
-    log.info "Hubitat Bulk File Manager v1.0.4 updated"
+    log.info "Hubitat Bulk File Manager v1.0.5 updated"
     initialize()
 }
 
@@ -360,31 +370,75 @@ def initialize() {
  */
 def getFileList() {
     def files = []
-    try {
-        httpGet([
-            uri    : "${getHubBaseUrl()}/hub/fileManager/json",
-            headers: makeAuthHeaders(),
-            timeout: 30
-        ]) { resp ->
-            if (resp.status != 200) {
-                log.warn "getFileList: HTTP ${resp.status}"
-                return
+    def emptySuccess = null
+    def errors = []
+
+    for (baseUrl in getFileManagerBaseUrls()) {
+        try {
+            def candidate = null
+            def success = false
+            httpGet([
+                uri    : "${baseUrl}/hub/fileManager/json",
+                headers: makeAuthHeaders(),
+                timeout: 30
+            ]) { resp ->
+                if (resp.status != 200) {
+                    log.warn "getFileList: HTTP ${resp.status} via ${baseUrl}"
+                    errors << "HTTP ${resp.status} via ${baseUrl}"
+                    return
+                }
+                success = true
+                def data = resp.data
+                def list = (data instanceof List) ? data : (data?.files ?: data?.fileList ?: [])
+                candidate = list.collect { f ->
+                    def n = (f.name ?: f.fileName ?: "").toString()
+                    [
+                        name    : n,
+                        size    : (f.size ?: 0L) as Long,
+                        date    : (f.date ?: f.lastModified ?: "").toString(),
+                        mimeType: getMimeType(n)
+                    ]
+                }.findAll { it.name }
             }
-            def data = resp.data
-            def list = (data instanceof List) ? data : (data?.fileList ?: [])
-            files = list.collect { f ->
-                def n = (f.name ?: "").toString()
-                [
-                    name    : n,
-                    size    : (f.size ?: 0L) as Long,
-                    date    : (f.date ?: "").toString(),
-                    mimeType: getMimeType(n)
+
+            if (!success) continue
+
+            if (candidate && !candidate.isEmpty()) {
+                files = candidate
+                state.fileListStatus = [
+                    message: "Loaded ${candidate.size()} file(s) from ${baseUrl}/hub/fileManager/json",
+                    errors : false,
+                    baseUrl: baseUrl
                 ]
-            }.findAll { it.name }
+                return files
+            }
+
+            if (emptySuccess == null) {
+                emptySuccess = [
+                    files  : candidate ?: [],
+                    baseUrl: baseUrl
+                ]
+            }
+        } catch (e) {
+            log.warn "getFileList: ${e.message} via ${baseUrl}"
+            errors << "${e.message} via ${baseUrl}"
         }
-    } catch (e) {
-        log.error "getFileList: ${e.message}"
     }
+
+    if (emptySuccess != null) {
+        state.fileListStatus = [
+            message: "Connected to ${emptySuccess.baseUrl}/hub/fileManager/json but it returned 0 files.",
+            errors : true,
+            baseUrl: emptySuccess.baseUrl
+        ]
+        return emptySuccess.files
+    }
+
+    state.fileListStatus = [
+        message: "Unable to load Hubitat File Manager listing on ports 8080 or 80. " +
+                 (errors ? "Last result: ${errors[0]}" : "Check hub IP and token settings."),
+        errors : true
+    ]
     return files
 }
 
@@ -678,6 +732,12 @@ def escapeHtml(String s) {
 def getHubBaseUrl() {
     def ip = settings.hubIp?.trim() ?: location.hub?.localIP ?: "127.0.0.1"
     return "http://${ip}"
+}
+
+def getFileManagerBaseUrls() {
+    def ip = settings.hubIp?.trim() ?: location.hub?.localIP ?: "127.0.0.1"
+    if (ip.contains(":")) return ["http://${ip}"]
+    return ["http://${ip}:8080", "http://${ip}"]
 }
 
 def makeAuthHeaders() {

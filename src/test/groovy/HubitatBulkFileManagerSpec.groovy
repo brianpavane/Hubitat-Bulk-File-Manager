@@ -571,7 +571,9 @@ class HubitatBulkFileManagerSpec extends Specification {
             [name: 'image.png',  size: 1024, date: '2026-01-15 10:00:00'],
             [name: 'notes.txt',  size:  512, date: '2026-02-01 09:00:00'],
         ]]
-        harness.stubFileListOk()
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200, data: harness.fileListResponse
+        ]
 
         when:
         def result = app.getFileList()
@@ -581,6 +583,7 @@ class HubitatBulkFileManagerSpec extends Specification {
         result[0].name == 'image.png'
         result[0].size == 1024L
         result[1].name == 'notes.txt'
+        harness.state.fileListStatus.message.contains('http://192.168.1.100:8080/hub/fileManager/json')
     }
 
     def 'getFileList: parses bare list JSON response'() {
@@ -588,7 +591,7 @@ class HubitatBulkFileManagerSpec extends Specification {
         harness.fileListResponse = [
             [name: 'photo.jpg', size: 2048, date: '2026-03-01 00:00:00']
         ]
-        harness.httpGetResponses['http://192.168.1.100/hub/fileManager/json'] = [
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
             status: 200, data: harness.fileListResponse
         ]
 
@@ -600,12 +603,29 @@ class HubitatBulkFileManagerSpec extends Specification {
         result[0].name == 'photo.jpg'
     }
 
+    def 'getFileList: parses files-wrapped JSON response'() {
+        given:
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200,
+            data  : [files: [[fileName: 'hub-file.txt', size: 12, lastModified: '2026-03-01 00:00:00']]]
+        ]
+
+        when:
+        def result = app.getFileList()
+
+        then:
+        result*.name == ['hub-file.txt']
+        result[0].date == '2026-03-01 00:00:00'
+    }
+
     def 'getFileList: enriches entries with mimeType'() {
         given:
         harness.fileListResponse = [fileList: [
             [name: 'banner.png', size: 4096, date: '2026-01-01 00:00:00']
         ]]
-        harness.stubFileListOk()
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200, data: harness.fileListResponse
+        ]
 
         when:
         def result = app.getFileList()
@@ -614,26 +634,37 @@ class HubitatBulkFileManagerSpec extends Specification {
         result[0].mimeType == 'image/png'
     }
 
-    def 'getFileList: returns empty list on HTTP error status'() {
+    def 'getFileList: falls back to port 80 when port 8080 fails'() {
         given:
-        harness.stubFileListFail(403)
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 404, data: null
+        ]
+        harness.httpGetResponses['http://192.168.1.100/hub/fileManager/json'] = [
+            status: 200, data: [[name: 'fallback.txt', size: 1, date: '2026-01-01 00:00:00']]
+        ]
 
         when:
         def result = app.getFileList()
 
         then:
-        result == []
+        result*.name == ['fallback.txt']
+        harness.state.fileListStatus.message.contains('http://192.168.1.100/hub/fileManager/json')
     }
 
-    def 'getFileList: returns empty list on network exception'() {
+    def 'getFileList: prefers non-empty port 80 response when port 8080 returns empty list'() {
         given:
-        // No stub registered — httpGet mock will throw
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200, data: [files: []]
+        ]
+        harness.httpGetResponses['http://192.168.1.100/hub/fileManager/json'] = [
+            status: 200, data: [[name: 'nonempty.txt', size: 1, date: '2026-01-01 00:00:00']]
+        ]
+
         when:
         def result = app.getFileList()
 
         then:
-        result == []
-        harness.logsAt('ERROR').size() == 1
+        result*.name == ['nonempty.txt']
     }
 
     def 'getFileList: filters out entries with blank names'() {
@@ -643,7 +674,9 @@ class HubitatBulkFileManagerSpec extends Specification {
             [name: '',          size: 200, date: '2026-01-01 00:00:00'],
             [name: null,        size: 300, date: '2026-01-01 00:00:00'],
         ]]
-        harness.stubFileListOk()
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200, data: harness.fileListResponse
+        ]
 
         when:
         def result = app.getFileList()
@@ -651,6 +684,32 @@ class HubitatBulkFileManagerSpec extends Specification {
         then:
         result.size() == 1
         result[0].name == 'valid.txt'
+    }
+
+    def 'getFileList: returns empty list with diagnostic status when both ports fail'() {
+        when:
+        def result = app.getFileList()
+
+        then:
+        result == []
+        harness.state.fileListStatus.errors
+        harness.state.fileListStatus.message.contains('ports 8080 or 80')
+        harness.logsAt('WARN').size() >= 2
+    }
+
+    def 'getFileList: returns empty list with diagnostic status when endpoint returns zero files'() {
+        given:
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200, data: [files: []]
+        ]
+
+        when:
+        def result = app.getFileList()
+
+        then:
+        result == []
+        harness.state.fileListStatus.errors
+        harness.state.fileListStatus.message.contains('returned 0 files')
     }
 
     // ════════════════════════════════════════════════════════════════
