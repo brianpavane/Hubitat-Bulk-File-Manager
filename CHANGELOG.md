@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.6] — 2026-04-04
+
+### Changed
+- Added inline checkbox-style file selection directly in the file viewer
+- Removed the need to use the separate bottom selector for one-off file selection
+- File viewer column headers now support clickable sorting for `Name`, `Type`, `Size`, and `Modified`
+- Spock test suite updated to 145 tests, 0 failures
+
 ## [1.0.5] — 2026-04-04
 
 ### Changed
@@ -83,10 +91,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - This project is a single-file Hubitat Groovy app; there is no `package.json`.  
-  Version is tracked in the file header (`Version: 1.0.5`) and in this changelog.
+  Version is tracked in the file header (`Version: 1.0.6`) and in this changelog.
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.6]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.6
 [1.0.5]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.5
 [1.0.4]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.4
 [1.0.3]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.3

@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.5
+ *  Version: 1.0.6
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -53,7 +53,20 @@ preferences {
 // ────────────────────────────────────────────────────────────────
 
 def mainPage() {
-    def version   = "1.0.5"
+    def version   = "1.0.6"
+    if (params?.sortField != null) {
+        def requestedSortField = params.sortField.toString()
+        app.updateSetting("sortField", [type: "enum", value: requestedSortField])
+        settings.sortField = requestedSortField
+    }
+    if (params?.sortDir != null) {
+        def requestedSortDir = params.sortDir.toString()
+        app.updateSetting("sortDir", [type: "enum", value: requestedSortDir])
+        settings.sortDir = requestedSortDir
+    }
+    if (params?.toggleFile != null) {
+        toggleSelectedFile(params.toggleFile.toString())
+    }
     def allFiles  = getFileList()
     def sortField = (settings.sortField  ?: "name").toString()
     def sortDir   = (settings.sortDir    ?: "asc").toString()
@@ -97,7 +110,7 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
                   width         : 6
             input "sortField", "enum",
                   title        : "Sort by",
-                  options      : ["name": "Name", "size": "Size", "date": "Date Modified"],
+                  options      : ["name": "Name", "mimeType": "Type", "size": "Size", "date": "Date Modified"],
                   defaultValue : "name",
                   required     : false,
                   submitOnChange: true,
@@ -135,23 +148,7 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
 
         // ── Finder-style file browser ──────────────────────────────────
         section("Files  /local/") {
-            paragraph buildFinderTable(files, sortField, sortDir)
-        }
-
-        // ── Selection input ────────────────────────────────────────────
-        section("Select Files") {
-            def options = buildSelectionOptions(files)
-            if (options) {
-                input "selectedFiles", "enum",
-                      title         : "${selCount} of ${options.size()} selected" +
-                                      "  (${formatSize(selSize)} / ${formatSize(totalSize)})",
-                      multiple      : true,
-                      options       : options,
-                      required      : false,
-                      submitOnChange: true
-            } else {
-                paragraph "<i style='color:#999;font-size:13px;'>No files found.</i>"
-            }
+            paragraph buildFinderTable(files, selected, sortField, sortDir)
         }
 
         // ── Status bar ─────────────────────────────────────────────────
@@ -178,7 +175,7 @@ def confirmDeletePage() {
     def toDelete  = (settings.selectedFiles ?: []) as List
     def completed = state.deleteResult != null
 
-    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.5",
+    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.6",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -226,7 +223,7 @@ def destinationPickerPage() {
     def completed = state.opResult != null
 
     dynamicPage(name: "destinationPickerPage",
-                title: "${op.capitalize()} Files  \u2022  v1.0.5",
+                title: "${op.capitalize()} Files  \u2022  v1.0.6",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -268,7 +265,7 @@ any <code>/</code> in the name is part of the filename.</small>"""
 // ────────────────────────────────────────────────────────────────
 
 def settingsPage() {
-    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.5",
+    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.6",
                 install: false, uninstall: false) {
 
         section("Hub Connection") {
@@ -344,12 +341,12 @@ def appButtonHandler(String btn) {
 // ════════════════════════════════════════════════════════════════
 
 def installed() {
-    log.info "Hubitat Bulk File Manager v1.0.5 installed"
+    log.info "Hubitat Bulk File Manager v1.0.6 installed"
     initialize()
 }
 
 def updated() {
-    log.info "Hubitat Bulk File Manager v1.0.5 updated"
+    log.info "Hubitat Bulk File Manager v1.0.6 updated"
     initialize()
 }
 
@@ -575,6 +572,7 @@ def filterFiles(List allFiles, String search, String sortField, String sortDir) 
     filtered.sort { a, b ->
         def av, bv
         switch (sortField) {
+            case "mimeType": av = a.mimeType ?: "";         bv = b.mimeType ?: "";         break
             case "size": av = (a.size ?: 0L) as Long; bv = (b.size ?: 0L) as Long; break
             case "date": av = a.date ?: "";            bv = b.date ?: "";            break
             default:     av = a.name ?: "";            bv = b.name ?: "";            break
@@ -601,14 +599,16 @@ def computeSelectedSize(List allFiles, List selected) {
  * Renders the flat file list as a Finder-style HTML table.
  * Sort indicators appear on the active column header.
  */
-def buildFinderTable(List files, String sortField = "name", String sortDir = "asc") {
+def buildFinderTable(List files, List selectedFiles = [], String sortField = "name", String sortDir = "asc") {
     if (files.isEmpty()) {
         return """<div style="padding:30px;text-align:center;color:#aaa;font-size:13px;\
 background:#fafafa;border-radius:6px;border:1px dashed #ddd;">
 &#128194; No files found.</div>"""
     }
 
+    def selectedSet = ((selectedFiles ?: []) as List).collect { it?.toString() }.findAll { it } as Set
     def nameCls  = sortField == "name" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
+    def typeCls  = sortField == "mimeType" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
     def sizeCls  = sortField == "size" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
     def dateCls  = sortField == "date" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
 
@@ -619,29 +619,34 @@ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;}
 .fdr thead tr{background:#efefef;}
 .fdr th{padding:7px 10px;text-align:left;border-bottom:2px solid #d4d4d4;\
 font-weight:600;color:#333;white-space:nowrap;user-select:none;}
+.fdr th a{color:#333;text-decoration:none;display:block;}
+.fdr th a:hover{text-decoration:underline;}
 .fdr th.sz{text-align:right;}
 .fdr td{padding:5px 10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}
 .fdr tr:hover td{background:#e8f0fe;}
 .fdr .sz{text-align:right;font-family:monospace;font-size:12px;color:#555;}
 .fdr .dt{color:#777;font-size:12px;}
 .fdr .mt{color:#bbb;font-size:11px;}
+.fdr .ck{width:34px;text-align:center;font-size:16px;}
 .fdr .ic{width:30px;text-align:center;font-size:15px;}
 .sort-asc::after{content:' \u25b2';font-size:10px;}
 .sort-desc::after{content:' \u25bc';font-size:10px;}
 </style>
 <table class='fdr'>
 <thead><tr>
+  <th class='ck'>Sel</th>
   <th class='ic'></th>
-  <th class='${nameCls}'>Name</th>
-  <th>Type</th>
-  <th class='sz ${sizeCls}'>Size</th>
-  <th class='${dateCls}'>Modified</th>
+  <th class='${nameCls}'>${buildSortHeaderLink("Name", "name", sortField, sortDir)}</th>
+  <th class='${typeCls}'>${buildSortHeaderLink("Type", "mimeType", sortField, sortDir)}</th>
+  <th class='sz ${sizeCls}'>${buildSortHeaderLink("Size", "size", sortField, sortDir)}</th>
+  <th class='${dateCls}'>${buildSortHeaderLink("Modified", "date", sortField, sortDir)}</th>
 </tr></thead>
 <tbody>""")
 
     files.eachWithIndex { f, i ->
         def bg = (i % 2 == 1) ? " style='background:#f9f9f9;'" : ""
         sb.append("""<tr${bg}>
+<td class='ck'>${buildSelectionToggleLink(f.name, selectedSet.contains(f.name))}</td>
 <td class='ic'>${getFileIcon(f.mimeType)}</td>
 <td>${escapeHtml(f.name)}</td>
 <td class='mt'>${escapeHtml(f.mimeType ?: '\u2014')}</td>
@@ -651,6 +656,20 @@ font-weight:600;color:#333;white-space:nowrap;user-select:none;}
     }
     sb.append("</tbody></table>")
     return sb.toString()
+}
+
+def buildSortHeaderLink(String label, String field,
+                        String activeSortField = "name", String activeSortDir = "asc") {
+    def nextDir   = (activeSortField == field && activeSortDir == "asc") ? "desc" : "asc"
+    def indicator = (activeSortField == field) ? (activeSortDir == "asc" ? " &#9650;" : " &#9660;") : ""
+    return "<a href='?sortField=${urlEncode(field)}&sortDir=${urlEncode(nextDir)}'>" +
+           "${escapeHtml(label)}${indicator}</a>"
+}
+
+def buildSelectionToggleLink(String filename, boolean selected = false) {
+    def symbol = selected ? "&#9745;" : "&#9744;"
+    def action = selected ? "Deselect" : "Select"
+    return "<a href='?toggleFile=${urlEncode(filename)}' title='${action} ${escapeHtml(filename)}'>${symbol}</a>"
 }
 
 /**
@@ -665,6 +684,17 @@ def buildSelectionOptions(List files) {
         options[f.name] = label
     }
     return options
+}
+
+def toggleSelectedFile(String filename) {
+    def name = filename?.toString()?.trim()
+    if (!name) return
+    def selected = ((settings.selectedFiles ?: []) as List).collect { it?.toString() }.findAll { it }
+    if (selected.contains(name)) selected.removeAll { it == name }
+    else selected << name
+    selected = selected.unique()
+    app.updateSetting("selectedFiles", [type: "enum", value: selected])
+    settings.selectedFiles = selected
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -727,6 +757,10 @@ def getFileIcon(String mimeType) {
 
 def escapeHtml(String s) {
     s?.replace("&", "&amp;")?.replace("<", "&lt;")?.replace(">", "&gt;") ?: ""
+}
+
+def urlEncode(String s) {
+    java.net.URLEncoder.encode(s ?: "", "UTF-8").replace("+", "%20")
 }
 
 def getHubBaseUrl() {
