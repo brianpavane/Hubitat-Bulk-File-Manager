@@ -453,10 +453,10 @@ class HubitatBulkFileManagerSpec extends Specification {
 
         then:
         html.contains('>Sel<')
-        html.contains('>Name')
-        html.contains('>Type</a>')
-        html.contains('>Size</a>')
-        html.contains('>Modified</a>')
+        html.contains('>Name<')
+        html.contains('>Type<')
+        html.contains('>Size<')
+        html.contains('>Modified<')
     }
 
     def 'buildFinderTable: HTML-escapes filename'() {
@@ -482,7 +482,7 @@ class HubitatBulkFileManagerSpec extends Specification {
 
         then:
         html.contains("class='sort-asc'")
-        html.contains("?sortField=name&sortDir=desc")
+        html.contains('>Name<')
     }
 
     def 'buildFinderTable: active descending sort column has sort-desc class on header'() {
@@ -495,10 +495,10 @@ class HubitatBulkFileManagerSpec extends Specification {
 
         then:
         html.contains('sort-desc')
-        html.contains("?sortField=size&sortDir=asc")
+        html.contains('>Size<')
     }
 
-    def 'buildFinderTable: type header can be active and toggle sort direction'() {
+    def 'buildFinderTable: type header can be active'() {
         given:
         def files = [[name: 'a.txt', size: 1L,
                       date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
@@ -507,17 +507,8 @@ class HubitatBulkFileManagerSpec extends Specification {
         def html = app.buildFinderTable(files, [], 'mimeType', 'asc')
 
         then:
-        html.contains("?sortField=mimeType&sortDir=desc")
-        html.contains('Type &#9650;')
-    }
-
-    def 'buildSortHeaderLink: inactive column links to ascending sort'() {
-        when:
-        def html = app.buildSortHeaderLink('Modified', 'date', 'name', 'asc')
-
-        then:
-        html.contains('?sortField=date&sortDir=asc')
-        html.contains('>Modified</a>')
+        html.contains('sort-asc')
+        html.contains('>Type<')
     }
 
     def 'buildFinderTable: inactive sort columns have empty class string'() {
@@ -546,7 +537,7 @@ class HubitatBulkFileManagerSpec extends Specification {
         html.contains('&#128247;')  // image icon
     }
 
-    def 'buildFinderTable: renders unchecked selection toggle by default'() {
+    def 'buildFinderTable: renders unchecked selection marker by default'() {
         given:
         def files = [[name: 'photo.png', size: 512L,
                       date: '2026-01-01 00:00:00', mimeType: 'image/png']]
@@ -555,7 +546,6 @@ class HubitatBulkFileManagerSpec extends Specification {
         def html = app.buildFinderTable(files, [], 'name', 'asc')
 
         then:
-        html.contains("?toggleFile=photo.png")
         html.contains('&#9744;')
     }
 
@@ -652,25 +642,6 @@ class HubitatBulkFileManagerSpec extends Specification {
 
         then:
         opts['big.zip'].contains('2.0 MB')
-    }
-
-    def 'toggleSelectedFile: adds file when it is not selected'() {
-        when:
-        app.toggleSelectedFile('photo.png')
-
-        then:
-        harness.settings['selectedFiles'] == ['photo.png']
-    }
-
-    def 'toggleSelectedFile: removes file when it is already selected'() {
-        given:
-        harness.settings['selectedFiles'] = ['photo.png', 'notes.txt']
-
-        when:
-        app.toggleSelectedFile('photo.png')
-
-        then:
-        harness.settings['selectedFiles'] == ['notes.txt']
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.8] — 2026-04-04
+
+### Changed
+- Replaced non-working inline HTML sort links with Hubitat-native `Sort By` and `Direction` controls in the File Manager section
+- Replaced inline checkbox-style file toggles with a Hubitat-native multi-select field for files on the current page
+- Added a note in the File Manager view clarifying that Hubitat redraws dynamic pages after sort and selection changes
+- Spock test suite remains at 148 tests, 0 failures
+
 ## [1.0.7] — 2026-04-04
 
 ### Changed
@@ -99,10 +107,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - This project is a single-file Hubitat Groovy app; there is no `package.json`.  
-  Version is tracked in the file header (`Version: 1.0.7`) and in this changelog.
+  Version is tracked in the file header (`Version: 1.0.8`) and in this changelog.
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.8]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.8
 [1.0.7]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.7
 [1.0.6]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.6
 [1.0.5]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.5

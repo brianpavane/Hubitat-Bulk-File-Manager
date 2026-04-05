@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.7  
+**Version:** 1.0.8  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -229,6 +229,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.8 | 2026-04-04 | Replaced non-working inline HTML sort and selection links with Hubitat-native file-manager controls |
 | 1.0.7 | 2026-04-04 | Formatted numeric modified timestamps as dates, added previous/next paging, and kept sorting controls in the file manager view |
 | 1.0.6 | 2026-04-04 | Added inline file selection checkboxes and clickable file-viewer header sorting |
 | 1.0.5 | 2026-04-04 | Added dual-port file-manager probing and clearer file-list diagnostics |

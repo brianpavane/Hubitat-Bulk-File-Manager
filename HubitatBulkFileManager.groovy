@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.7
+ *  Version: 1.0.8
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -53,20 +53,7 @@ preferences {
 // ────────────────────────────────────────────────────────────────
 
 def mainPage() {
-    def version   = "1.0.7"
-    if (params?.sortField != null) {
-        def requestedSortField = params.sortField.toString()
-        app.updateSetting("sortField", [type: "enum", value: requestedSortField])
-        settings.sortField = requestedSortField
-    }
-    if (params?.sortDir != null) {
-        def requestedSortDir = params.sortDir.toString()
-        app.updateSetting("sortDir", [type: "enum", value: requestedSortDir])
-        settings.sortDir = requestedSortDir
-    }
-    if (params?.toggleFile != null) {
-        toggleSelectedFile(params.toggleFile.toString())
-    }
+    def version   = "1.0.8"
     def requestedPage = params?.page != null ? safeInt(params.page, 1) : safeInt(state.currentPage, 1)
     state.currentPage = Math.max(1, requestedPage)
     def allFiles  = getFileList()
@@ -141,6 +128,28 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
 
         // ── Finder-style file browser ──────────────────────────────────
         section("Files  /local/") {
+            input "sortField", "enum",
+                  title         : "Sort By",
+                  options       : [name: "Name", mimeType: "Type", size: "Size", date: "Modified"],
+                  defaultValue  : "name",
+                  required      : false,
+                  submitOnChange: true,
+                  width         : 4
+            input "sortDir", "enum",
+                  title         : "Direction",
+                  options       : [asc: "Ascending", desc: "Descending"],
+                  defaultValue  : "asc",
+                  required      : false,
+                  submitOnChange: true,
+                  width         : 4
+            input "selectedFiles", "enum",
+                  title         : "Selected Files On This Page",
+                  options       : buildSelectionOptions(files),
+                  multiple      : true,
+                  required      : false,
+                  submitOnChange: true
+            paragraph "<small style='color:#777;'>Hubitat refreshes this page after sort or selection changes. " +
+                      "The table below updates to match the current page and selection state.</small>"
             paragraph buildFinderTable(files, selected, sortField, sortDir)
             paragraph buildPaginationBar(currentPage, pageCount, filteredFiles.size(), pageSize)
         }
@@ -169,7 +178,7 @@ def confirmDeletePage() {
     def toDelete  = (settings.selectedFiles ?: []) as List
     def completed = state.deleteResult != null
 
-    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.7",
+    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.8",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -217,7 +226,7 @@ def destinationPickerPage() {
     def completed = state.opResult != null
 
     dynamicPage(name: "destinationPickerPage",
-                title: "${op.capitalize()} Files  \u2022  v1.0.7",
+                title: "${op.capitalize()} Files  \u2022  v1.0.8",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -259,7 +268,7 @@ any <code>/</code> in the name is part of the filename.</small>"""
 // ────────────────────────────────────────────────────────────────
 
 def settingsPage() {
-    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.7",
+    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.8",
                 install: false, uninstall: false) {
 
         section("Hub Connection") {
@@ -337,12 +346,12 @@ def appButtonHandler(String btn) {
 // ════════════════════════════════════════════════════════════════
 
 def installed() {
-    log.info "Hubitat Bulk File Manager v1.0.7 installed"
+    log.info "Hubitat Bulk File Manager v1.0.8 installed"
     initialize()
 }
 
 def updated() {
-    log.info "Hubitat Bulk File Manager v1.0.7 updated"
+    log.info "Hubitat Bulk File Manager v1.0.8 updated"
     initialize()
 }
 
@@ -599,7 +608,7 @@ def computeSelectedSize(List allFiles, List selected) {
 
 /**
  * Renders the flat file list as a Finder-style HTML table.
- * Sort indicators appear on the active column header.
+ * Sort indicators and selection state mirror the native controls above.
  */
 def buildFinderTable(List files, List selectedFiles = [], String sortField = "name", String sortDir = "asc") {
     if (files.isEmpty()) {
@@ -638,17 +647,18 @@ font-weight:600;color:#333;white-space:nowrap;user-select:none;}
 <thead><tr>
   <th class='ck'>Sel</th>
   <th class='ic'></th>
-  <th class='${nameCls}'>${buildSortHeaderLink("Name", "name", sortField, sortDir)}</th>
-  <th class='${typeCls}'>${buildSortHeaderLink("Type", "mimeType", sortField, sortDir)}</th>
-  <th class='sz ${sizeCls}'>${buildSortHeaderLink("Size", "size", sortField, sortDir)}</th>
-  <th class='${dateCls}'>${buildSortHeaderLink("Modified", "date", sortField, sortDir)}</th>
+  <th class='${nameCls}'>Name</th>
+  <th class='${typeCls}'>Type</th>
+  <th class='sz ${sizeCls}'>Size</th>
+  <th class='${dateCls}'>Modified</th>
 </tr></thead>
 <tbody>""")
 
     files.eachWithIndex { f, i ->
         def bg = (i % 2 == 1) ? " style='background:#f9f9f9;'" : ""
+        def selectionIcon = selectedSet.contains(f.name) ? "&#9745;" : "&#9744;"
         sb.append("""<tr${bg}>
-<td class='ck'>${buildSelectionToggleLink(f.name, selectedSet.contains(f.name))}</td>
+<td class='ck'>${selectionIcon}</td>
 <td class='ic'>${getFileIcon(f.mimeType)}</td>
 <td>${escapeHtml(f.name)}</td>
 <td class='mt'>${escapeHtml(f.mimeType ?: '\u2014')}</td>
@@ -658,20 +668,6 @@ font-weight:600;color:#333;white-space:nowrap;user-select:none;}
     }
     sb.append("</tbody></table>")
     return sb.toString()
-}
-
-def buildSortHeaderLink(String label, String field,
-                        String activeSortField = "name", String activeSortDir = "asc") {
-    def nextDir   = (activeSortField == field && activeSortDir == "asc") ? "desc" : "asc"
-    def indicator = (activeSortField == field) ? (activeSortDir == "asc" ? " &#9650;" : " &#9660;") : ""
-    return "<a href='?sortField=${urlEncode(field)}&sortDir=${urlEncode(nextDir)}&page=1'>" +
-           "${escapeHtml(label)}${indicator}</a>"
-}
-
-def buildSelectionToggleLink(String filename, boolean selected = false) {
-    def symbol = selected ? "&#9745;" : "&#9744;"
-    def action = selected ? "Deselect" : "Select"
-    return "<a href='?toggleFile=${urlEncode(filename)}' title='${action} ${escapeHtml(filename)}'>${symbol}</a>"
 }
 
 def buildPaginationBar(int currentPage, int pageCount, int totalFiles, int pageSize) {
