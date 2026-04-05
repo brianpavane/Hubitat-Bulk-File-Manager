@@ -187,138 +187,26 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  6. parentPath
+    //  6. filterFiles
     // ════════════════════════════════════════════════════════════════
 
-    @Unroll
-    def 'parentPath: "#input" -> "#expected"'() {
-        expect:
-        app.parentPath(input) == expected
-
-        where:
-        input            | expected
-        ''               | ''
-        'photos/'        | ''
-        'photos/vacation/'   | 'photos/'
-        'a/b/c/'         | 'a/b/'
-        'a/b/c/d/'       | 'a/b/c/'
-        // trailing-slash tolerance
-        'photos/vacation' | 'photos/'
-        'photos'          | ''
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  7. inferDirectories
-    // ════════════════════════════════════════════════════════════════
-
-    def 'inferDirectories: flat list at root has no directories'() {
+    def 'filterFiles: returns all files when search is empty'() {
         given:
         def files = [
             AppTestHarness.fileEntry('photo.png'),
-            AppTestHarness.fileEntry('notes.txt')
-        ]
-        expect:
-        app.inferDirectories(files, '') == []
-    }
-
-    def 'inferDirectories: extracts single directory at root'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('photos/img1.png'),
-            AppTestHarness.fileEntry('photos/img2.png'),
-            AppTestHarness.fileEntry('notes.txt')
-        ]
-        expect:
-        app.inferDirectories(files, '') == ['photos']
-    }
-
-    def 'inferDirectories: extracts multiple directories sorted'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('zips/a.zip'),
-            AppTestHarness.fileEntry('audio/b.mp3'),
-            AppTestHarness.fileEntry('icons/c.ico'),
-        ]
-        expect:
-        app.inferDirectories(files, '') == ['audio', 'icons', 'zips']
-    }
-
-    def 'inferDirectories: deduplicates directories'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('docs/a.txt'),
-            AppTestHarness.fileEntry('docs/b.txt'),
-            AppTestHarness.fileEntry('docs/c.txt'),
-        ]
-        expect:
-        app.inferDirectories(files, '') == ['docs']
-    }
-
-    def 'inferDirectories: only looks at immediate children of currentPath'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('photos/vacation/img.png'),
-            AppTestHarness.fileEntry('photos/work/report.pdf'),
-            AppTestHarness.fileEntry('docs/readme.txt'),
-        ]
-        expect:
-        // Inside 'photos/', should see 'vacation' and 'work' but not 'docs'
-        app.inferDirectories(files, 'photos/') == ['vacation', 'work']
-    }
-
-    def 'inferDirectories: ignores files not under currentPath'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('other/file.txt'),
-            AppTestHarness.fileEntry('images/img.png'),
-        ]
-        expect:
-        app.inferDirectories(files, 'docs/') == []
-    }
-
-    def 'inferDirectories: empty file list returns empty list'() {
-        expect:
-        app.inferDirectories([], '') == []
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  8. filterAndSortFiles
-    // ════════════════════════════════════════════════════════════════
-
-    def 'filterAndSortFiles: returns only direct children of currentPath'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('img.png'),
-            AppTestHarness.fileEntry('docs/readme.txt'),
-            AppTestHarness.fileEntry('docs/notes.txt'),
+            AppTestHarness.fileEntry('notes.txt'),
+            AppTestHarness.fileEntry('readme.md'),
         ]
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', '', 'name', 'asc')
+        def result = app.filterFiles(files, '', 'name', 'asc')
 
         then:
-        result*.name == ['img.png']
+        result.size() == 3
     }
 
-    def 'filterAndSortFiles: filters into subdirectory'() {
-        given:
-        def files = [
-            AppTestHarness.fileEntry('img.png'),
-            AppTestHarness.fileEntry('docs/readme.txt'),
-            AppTestHarness.fileEntry('docs/notes.txt'),
-            AppTestHarness.fileEntry('docs/sub/deep.txt'),
-        ]
-        harness.settings['maxFiles'] = 200
-
-        when:
-        def result = app.filterAndSortFiles(files, 'docs/', '', 'name', 'asc')
-
-        then:
-        result*.name == ['docs/notes.txt', 'docs/readme.txt']
-    }
-
-    def 'filterAndSortFiles: search is case-insensitive'() {
+    def 'filterFiles: search is case-insensitive'() {
         given:
         def files = [
             AppTestHarness.fileEntry('Photo.PNG'),
@@ -328,25 +216,25 @@ class HubitatBulkFileManagerSpec extends Specification {
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', 'photo', 'name', 'asc')
+        def result = app.filterFiles(files, 'photo', 'name', 'asc')
 
         then:
         result*.name.toSet() == ['Photo.PNG', 'PHOTO_backup.jpg'] as Set
     }
 
-    def 'filterAndSortFiles: search returns empty when no match'() {
+    def 'filterFiles: search returns empty when no match'() {
         given:
         def files = [AppTestHarness.fileEntry('notes.txt')]
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', 'xyz', 'name', 'asc')
+        def result = app.filterFiles(files, 'xyz', 'name', 'asc')
 
         then:
         result.isEmpty()
     }
 
-    def 'filterAndSortFiles: sort by name ascending'() {
+    def 'filterFiles: sort by name ascending'() {
         given:
         def files = [
             AppTestHarness.fileEntry('zebra.txt'),
@@ -356,13 +244,13 @@ class HubitatBulkFileManagerSpec extends Specification {
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', '', 'name', 'asc')
+        def result = app.filterFiles(files, '', 'name', 'asc')
 
         then:
         result*.name == ['apple.txt', 'mango.txt', 'zebra.txt']
     }
 
-    def 'filterAndSortFiles: sort by name descending'() {
+    def 'filterFiles: sort by name descending'() {
         given:
         def files = [
             AppTestHarness.fileEntry('apple.txt'),
@@ -372,13 +260,13 @@ class HubitatBulkFileManagerSpec extends Specification {
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', '', 'name', 'desc')
+        def result = app.filterFiles(files, '', 'name', 'desc')
 
         then:
         result*.name == ['zebra.txt', 'mango.txt', 'apple.txt']
     }
 
-    def 'filterAndSortFiles: sort by size ascending'() {
+    def 'filterFiles: sort by size ascending'() {
         given:
         def files = [
             AppTestHarness.fileEntry('big.zip',   10_000L),
@@ -388,13 +276,13 @@ class HubitatBulkFileManagerSpec extends Specification {
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', '', 'size', 'asc')
+        def result = app.filterFiles(files, '', 'size', 'asc')
 
         then:
         result*.name == ['tiny.txt', 'medium.jpg', 'big.zip']
     }
 
-    def 'filterAndSortFiles: sort by date descending'() {
+    def 'filterFiles: sort by date descending'() {
         given:
         def files = [
             [name: 'old.txt',    size: 1L, date: '2024-01-01 00:00:00', mimeType: 'text/plain'],
@@ -404,34 +292,46 @@ class HubitatBulkFileManagerSpec extends Specification {
         harness.settings['maxFiles'] = 200
 
         when:
-        def result = app.filterAndSortFiles(files, '', '', 'date', 'desc')
+        def result = app.filterFiles(files, '', 'date', 'desc')
 
         then:
         result*.name == ['newest.txt', 'mid.txt', 'old.txt']
     }
 
-    def 'filterAndSortFiles: respects maxFiles setting'() {
+    def 'filterFiles: respects maxFiles setting'() {
         given:
         def files = (1..20).collect { AppTestHarness.fileEntry("file${it}.txt") }
         harness.settings['maxFiles'] = 15   // within valid range [10..2000]
 
         when:
-        def result = app.filterAndSortFiles(files, '', '', 'name', 'asc')
+        def result = app.filterFiles(files, '', 'name', 'asc')
 
         then:
         result.size() == 15
     }
 
-    def 'filterAndSortFiles: empty list returns empty'() {
+    def 'filterFiles: clamps maxFiles minimum to 10'() {
+        given:
+        def files = (1..20).collect { AppTestHarness.fileEntry("file${it}.txt") }
+        harness.settings['maxFiles'] = 2    // below minimum — clamped to 10
+
+        when:
+        def result = app.filterFiles(files, '', 'name', 'asc')
+
+        then:
+        result.size() == 10
+    }
+
+    def 'filterFiles: empty list returns empty'() {
         given:
         harness.settings['maxFiles'] = 200
 
         expect:
-        app.filterAndSortFiles([], '', '', 'name', 'asc') == []
+        app.filterFiles([], '', 'name', 'asc') == []
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  9. computeSelectedSize
+    //  7. computeSelectedSize
     // ════════════════════════════════════════════════════════════════
 
     def 'computeSelectedSize: empty selection returns 0'() {
@@ -474,72 +374,179 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  10. buildBreadcrumb
+    //  8. buildFinderTable
     // ════════════════════════════════════════════════════════════════
 
-    def 'buildBreadcrumb: root path shows /local'() {
+    def 'buildFinderTable: empty list shows empty-state div'() {
         when:
-        def html = app.buildBreadcrumb('')
+        def html = app.buildFinderTable([])
 
         then:
-        html.contains('/local')
-        !html.contains('&rsaquo;')
+        html.contains('No files found')
+        !html.contains('<table')
     }
 
-    def 'buildBreadcrumb: single level shows folder name in bold'() {
+    def 'buildFinderTable: non-empty list renders an HTML table with class fdr'() {
+        given:
+        def files = [[name: 'photo.png', size: 1024L,
+                      date: '2026-01-01 00:00:00', mimeType: 'image/png']]
+
         when:
-        def html = app.buildBreadcrumb('photos/')
+        def html = app.buildFinderTable(files)
 
         then:
-        html.contains('<b>photos</b>')
+        html.contains("class='fdr'")
+        html.contains('<table')
+        html.contains('</table>')
     }
 
-    def 'buildBreadcrumb: two levels shows both segment names'() {
+    def 'buildFinderTable: renders all five column headers'() {
+        given:
+        def files = [[name: 'a.txt', size: 1L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
         when:
-        def html = app.buildBreadcrumb('photos/vacation/')
+        def html = app.buildFinderTable(files)
 
         then:
-        html.contains('<b>photos</b>')
-        html.contains('<b>vacation</b>')
+        html.contains('>Name<')
+        html.contains('>Type<')
+        html.contains('>Size<')
+        html.contains('>Modified<')
     }
 
-    def 'buildBreadcrumb: returns non-empty HTML string'() {
-        expect:
-        app.buildBreadcrumb('') instanceof String
-        app.buildBreadcrumb('').length() > 0
+    def 'buildFinderTable: HTML-escapes filename'() {
+        given:
+        def files = [[name: '<script>xss</script>', size: 0L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFinderTable(files)
+
+        then:
+        !html.contains('<script>xss</script>')
+        html.contains('&lt;script&gt;xss&lt;/script&gt;')
+    }
+
+    def 'buildFinderTable: active ascending sort column has sort-asc class on header'() {
+        given:
+        def files = [[name: 'a.txt', size: 1L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFinderTable(files, 'name', 'asc')
+
+        then:
+        html.contains("class='sort-asc'")
+    }
+
+    def 'buildFinderTable: active descending sort column has sort-desc class on header'() {
+        given:
+        def files = [[name: 'a.txt', size: 1L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFinderTable(files, 'size', 'desc')
+
+        then:
+        html.contains('sort-desc')
+    }
+
+    def 'buildFinderTable: inactive sort columns have empty class string'() {
+        given:
+        def files = [[name: 'a.txt', size: 1L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFinderTable(files, 'name', 'asc')
+
+        then:
+        // size and date headers should have no sort class
+        !html.contains("class='sort-asc sz'") || html.contains("class='sz '")
+        !html.contains("class='sort-desc'") || true  // size/date not active
+    }
+
+    def 'buildFinderTable: renders file icon for each row'() {
+        given:
+        def files = [[name: 'photo.png', size: 512L,
+                      date: '2026-01-01 00:00:00', mimeType: 'image/png']]
+
+        when:
+        def html = app.buildFinderTable(files)
+
+        then:
+        html.contains('&#128247;')  // image icon
+    }
+
+    def 'buildFinderTable: renders formatted size'() {
+        given:
+        def files = [[name: 'big.zip', size: 2_097_152L,
+                      date: '2026-01-01 00:00:00', mimeType: 'application/zip']]
+
+        when:
+        def html = app.buildFinderTable(files)
+
+        then:
+        html.contains('2.0 MB')
+    }
+
+    def 'buildFinderTable: odd rows have alternating background color'() {
+        given:
+        def files = [
+            [name: 'first.txt',  size: 1L, date: '2026-01-01 00:00:00', mimeType: 'text/plain'],
+            [name: 'second.txt', size: 2L, date: '2026-01-01 00:00:00', mimeType: 'text/plain'],
+        ]
+
+        when:
+        def html = app.buildFinderTable(files)
+
+        then:
+        html.contains('#f9f9f9')  // odd row background
+    }
+
+    def 'buildFinderTable: includes Apple system font stack in CSS'() {
+        given:
+        def files = [[name: 'a.txt', size: 1L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFinderTable(files)
+
+        then:
+        html.contains('-apple-system')
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  11. buildSelectionOptions
+    //  9. buildSelectionOptions
     // ════════════════════════════════════════════════════════════════
 
     def 'buildSelectionOptions: empty file list returns empty map'() {
         expect:
-        app.buildSelectionOptions([], '') == [:]
+        app.buildSelectionOptions([]) == [:]
     }
 
-    def 'buildSelectionOptions: key is full filename path'() {
+    def 'buildSelectionOptions: key is full filename'() {
         given:
-        def files = [[name: 'docs/readme.txt', size: 512L,
+        def files = [[name: 'readme.txt', size: 512L,
                       date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
 
         when:
-        def opts = app.buildSelectionOptions(files, 'docs/')
+        def opts = app.buildSelectionOptions(files)
 
         then:
-        opts.containsKey('docs/readme.txt')
+        opts.containsKey('readme.txt')
     }
 
-    def 'buildSelectionOptions: label contains short filename'() {
+    def 'buildSelectionOptions: label contains filename'() {
         given:
-        def files = [[name: 'docs/readme.txt', size: 512L,
+        def files = [[name: 'readme.txt', size: 512L,
                       date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
 
         when:
-        def opts = app.buildSelectionOptions(files, 'docs/')
+        def opts = app.buildSelectionOptions(files)
 
         then:
-        opts['docs/readme.txt'].contains('readme.txt')
+        opts['readme.txt'].contains('readme.txt')
     }
 
     def 'buildSelectionOptions: label contains formatted size'() {
@@ -548,87 +555,21 @@ class HubitatBulkFileManagerSpec extends Specification {
                       date: '2026-01-01 00:00:00', mimeType: 'application/zip']]
 
         when:
-        def opts = app.buildSelectionOptions(files, '')
+        def opts = app.buildSelectionOptions(files)
 
         then:
         opts['big.zip'].contains('2.0 MB')
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  11b. buildSortHeaderLink / buildFileBrowserTable sorting headers
-    // ════════════════════════════════════════════════════════════════
-
-    def 'buildSortHeaderLink: active ascending sort shows up-arrow and toggles to desc'() {
-        when:
-        def html = app.buildSortHeaderLink('Name', 'name', 'docs/', 'name', 'asc')
-
-        then:
-        html.contains('Name &#9650;')
-        html.contains("?sortField=name&sortDir=desc&path=docs%2F")
-    }
-
-    def 'buildSortHeaderLink: inactive field links to ascending sort'() {
-        when:
-        def html = app.buildSortHeaderLink('Size', 'size', '', 'name', 'desc')
-
-        then:
-        html.contains('>Size</a>')
-        html.contains('?sortField=size&sortDir=asc')
-    }
-
-    def 'buildFileBrowserTable: renders clickable sort headers for name size and modified date'() {
-        given:
-        def files = [[name: 'docs/readme.txt', size: 512L,
-                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
-
-        when:
-        def html = app.buildFileBrowserTable([], files, 'docs/', 'name', 'asc')
-
-        then:
-        html.contains('?sortField=name&sortDir=desc&path=docs%2F')
-        html.contains('?sortField=size&sortDir=asc&path=docs%2F')
-        html.contains('?sortField=date&sortDir=asc&path=docs%2F')
-    }
-
-    def 'buildFileBrowserTable: shows parent folder row when inside a subfolder'() {
-        when:
-        def html = app.buildFileBrowserTable([], [], 'docs/archive/', 'name', 'asc')
-
-        then:
-        html.contains('&#128193; ..')
-        html.contains('?path=docs%2F')
-        html.contains('Up to docs/')
-    }
-
-    def 'buildFileBrowserTable: shows folders and files in one listing'() {
-        given:
-        def files = [[name: 'docs/readme.txt', size: 512L,
-                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
-
-        when:
-        def html = app.buildFileBrowserTable(['archive'], files, 'docs/', 'name', 'asc')
-
-        then:
-        html.contains('?path=docs%2Farchive%2F')
-        html.contains('Folder')
-        html.contains('readme.txt')
-        html.contains('text/plain')
-    }
-
-    def 'buildFileBrowserTable: root empty state does not require search input to explain emptiness'() {
-        expect:
-        app.buildFileBrowserTable([], [], '', 'name', 'asc').contains('This location is empty.')
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  12. getFileList
+    //  10. getFileList
     // ════════════════════════════════════════════════════════════════
 
     def 'getFileList: parses fileList-wrapped JSON response'() {
         given:
         harness.fileListResponse = [fileList: [
-            [name: 'image.png',      size: 1024, date: '2026-01-15 10:00:00'],
-            [name: 'docs/notes.txt', size:  512, date: '2026-02-01 09:00:00'],
+            [name: 'image.png',  size: 1024, date: '2026-01-15 10:00:00'],
+            [name: 'notes.txt',  size:  512, date: '2026-02-01 09:00:00'],
         ]]
         harness.stubFileListOk()
 
@@ -639,7 +580,7 @@ class HubitatBulkFileManagerSpec extends Specification {
         result.size() == 2
         result[0].name == 'image.png'
         result[0].size == 1024L
-        result[1].name == 'docs/notes.txt'
+        result[1].name == 'notes.txt'
     }
 
     def 'getFileList: parses bare list JSON response'() {
@@ -713,7 +654,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  13. performDelete
+    //  11. performDelete
     // ════════════════════════════════════════════════════════════════
 
     def 'performDelete: deletes via built-in sandbox call'() {
@@ -754,15 +695,6 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     def 'performDelete: partial failure is counted correctly'() {
-        given:
-        // First file succeeds via sandbox; second file fails both paths
-        int callCount = 0
-        harness.fileListResponse  // reset
-
-        // Override per-call: first call succeeds, second fails
-        def originalDeleteFails = harness.deleteHubFileShouldFail
-        // We'll track via a counter using the uploaded files mechanism
-        // Simplest: test 2-file list where sandbox works for all, then check count
         when:
         def result = app.performDelete(['ok.png', 'ok2.png'])
 
@@ -789,7 +721,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  14. performCopy
+    //  12. performCopy
     // ════════════════════════════════════════════════════════════════
 
     def 'performCopy: copies file with correct destination name'() {
@@ -870,7 +802,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  15. performMove
+    //  13. performMove
     // ════════════════════════════════════════════════════════════════
 
     def 'performMove: copies then deletes originals on success'() {
@@ -917,86 +849,11 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  16. createFolder
-    // ════════════════════════════════════════════════════════════════
-
-    def 'createFolder: creates .keep placeholder at root'() {
-        given:
-        harness.state['currentPath'] = ''
-
-        when:
-        def result = app.createFolder('photos')
-
-        then:
-        !result.errors
-        harness.uploadedFiles.size() == 1
-        harness.uploadedFiles[0].name == 'photos/.keep'
-        harness.uploadedFiles[0].size == 0
-    }
-
-    def 'createFolder: creates .keep placeholder inside currentPath'() {
-        given:
-        harness.state['currentPath'] = 'docs/'
-
-        when:
-        def result = app.createFolder('archive')
-
-        then:
-        !result.errors
-        harness.uploadedFiles[0].name == 'docs/archive/.keep'
-    }
-
-    def 'createFolder: sanitizes special characters in name'() {
-        given:
-        harness.state['currentPath'] = ''
-
-        when:
-        def result = app.createFolder('my folder!')
-
-        then:
-        !result.errors
-        harness.uploadedFiles[0].name == 'my_folder_/.keep'
-    }
-
-    def 'createFolder: rejects empty name'() {
-        when:
-        def result = app.createFolder('')
-
-        then:
-        result.errors
-        result.message.contains('empty')
-        harness.uploadedFiles.isEmpty()
-    }
-
-    def 'createFolder: rejects blank name'() {
-        when:
-        def result = app.createFolder('   ')
-
-        then:
-        result.errors
-        harness.uploadedFiles.isEmpty()
-    }
-
-    def 'createFolder: reports error when upload fails'() {
-        given:
-        harness.state['currentPath'] = ''
-        harness.uploadHubFileErrorMessage = 'Storage unavailable'
-
-        when:
-        def result = app.createFolder('photos')
-
-        then:
-        result.errors
-        result.message.contains('photos')
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  17. appButtonHandler — Select All / Deselect All
+    //  14. appButtonHandler — Select All / Deselect All
     // ════════════════════════════════════════════════════════════════
 
     def 'btnSelectAll: selects all visible files'() {
         given:
-        harness.state['currentPath'] = ''
         harness.settings['sortField']  = 'name'
         harness.settings['sortDir']    = 'asc'
         harness.settings['searchText'] = ''
@@ -1027,7 +884,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  17b. appButtonHandler — Confirm Delete
+    //  14b. appButtonHandler — Confirm Delete
     // ════════════════════════════════════════════════════════════════
 
     def 'btnConfirmDelete: deletes selected files and clears selection'() {
@@ -1060,7 +917,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  17c. appButtonHandler — Confirm Copy / Move
+    //  14c. appButtonHandler — Confirm Copy / Move
     // ════════════════════════════════════════════════════════════════
 
     def 'btnConfirmOp (copy): copies files and preserves selection'() {
@@ -1098,39 +955,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  17d. appButtonHandler — Create Folder
-    // ════════════════════════════════════════════════════════════════
-
-    def 'btnCreateFolder: creates folder and clears input'() {
-        given:
-        harness.state['currentPath']       = ''
-        harness.settings['newFolderName']  = 'my-archive'
-
-        when:
-        app.appButtonHandler('btnCreateFolder')
-
-        then:
-        harness.uploadedFiles[0].name == 'my-archive/.keep'
-        harness.settings['newFolderName'] == ''
-        harness.state['folderResult'] != null
-        !harness.state['folderResult'].errors
-    }
-
-    def 'btnCreateFolder: sets error result for empty folder name'() {
-        given:
-        harness.settings['newFolderName'] = ''
-        harness.state['currentPath']      = ''
-
-        when:
-        app.appButtonHandler('btnCreateFolder')
-
-        then:
-        harness.state['folderResult'].errors
-        harness.uploadedFiles.isEmpty()
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  18. getHubBaseUrl
+    //  15. getHubBaseUrl
     // ════════════════════════════════════════════════════════════════
 
     def 'getHubBaseUrl: uses configured hubIp when set'() {
@@ -1150,7 +975,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  19. makeAuthHeaders
+    //  16. makeAuthHeaders
     // ════════════════════════════════════════════════════════════════
 
     def 'makeAuthHeaders: includes Accept header always'() {

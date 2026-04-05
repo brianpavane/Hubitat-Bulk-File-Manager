@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.3  
+**Version:** 1.0.4  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -13,18 +13,17 @@ A full-featured file manager application for the Hubitat Elevation hub, providin
 
 | Feature | Description |
 |---|---|
-| **Directory navigation** | Simulated folder tree inferred from `/`-separated filenames with breadcrumb trail |
-| **Explorer-style browser** | Main screen shows folders and files together in a Finder/Explorer-like table |
-| **Search / filter** | Real-time case-insensitive search within the current directory |
+| **Finder-style browser** | Flat file listing in a macOS Finder-inspired table with icon, name, type, size, and date |
+| **Zero-config install** | Works immediately after adding — no settings required |
+| **Search / filter** | Real-time case-insensitive search across all files |
 | **Sorting** | Sort by name, size, or date — ascending or descending |
-| **Header sorting** | Click Name, Size, or Modified column headers to toggle sort direction |
 | **Individual selection** | Select single files via the multi-select input |
 | **Bulk selection** | Select All / Clear All toolbar buttons |
 | **Delete** | Mandatory confirmation page with full file list before any deletion |
-| **Copy** | Browse or type a destination path; copies with original basename preserved |
+| **Copy** | Type a destination path or prefix; copies with original basename preserved |
 | **Move** | Safe-move: sources are only deleted after all copies succeed |
-| **New Folder** | Creates a virtual folder using a `.keep` placeholder file |
-| **Status bar** | Live count of folders, files, total size, and selected size |
+| **Status bar** | Live count of files, total size, and selected size |
+| **Version display** | Current version shown in all page titles and the status bar |
 | **Auth support** | Optional hub security token for hubs with login enabled |
 
 ---
@@ -84,17 +83,9 @@ Open the app in **Apps → Hubitat Bulk File Manager**, then tap **⚙ Settings*
 
 ## Usage Guide
 
-### Navigating directories
-
-The hub file system is **flat** — all files live in `/local/`. The app treats `/` characters in filenames as path separators to simulate a folder hierarchy.
-
-- The **breadcrumb** at the top shows your current location.
-- Click any **📁 folder link** to descend into it.
-- Click **📁 ..** to go up one level.
-
 ### Searching
 
-Type in the **Search** box and the file list filters in real time. Search matches anywhere in the filename (case-insensitive) within the current directory only.
+Type in the **Search** box and the file list filters in real time. Search matches anywhere in the filename (case-insensitive) across all hub files.
 
 ### Selecting files
 
@@ -125,16 +116,6 @@ The **status bar** at the bottom always shows how many files are selected and th
 Same as Copy, but the source files are removed after all copies succeed.  
 If any copy fails, the operation is aborted and **no sources are deleted**.
 
-### Creating a new folder
-
-1. Navigate to the parent location.
-2. Click **📁 New Folder** in the toolbar.
-3. Enter a folder name (letters, numbers, hyphens, underscores).
-4. Click **📁 Create Folder**.
-
-> Folders are implemented as a hidden `.keep` file (`foldername/.keep`).  
-> A folder appears to be empty once all files inside it are deleted (the `.keep` file remains).
-
 ---
 
 ## Architecture Notes
@@ -146,11 +127,10 @@ Hubitat Hub
     ├── photos/vacation/img1.png   ← "/" treated as path separator
     └── docs/readme.txt
 
-App pages (5)
+App pages (4)
 ├── mainPage              — listing, search, sort, toolbar
 ├── confirmDeletePage     — delete confirmation
-├── destinationPickerPage — folder browser for copy/move
-├── newFolderPage         — folder creation
+├── destinationPickerPage — destination input for copy/move
 └── settingsPage          — hub connection config
 
 File API strategy
@@ -167,9 +147,7 @@ File API strategy
 | Limitation | Explanation |
 |---|---|
 | No undo | All delete operations are permanent |
-| Flat namespace | The hub stores all files in one namespace; directories are simulated |
-| No recursive search | Search applies to the current directory level only |
-| `.keep` files visible | Folder placeholders appear in listings; do not delete them if you want to preserve the folder |
+| Flat namespace | Hubitat stores all files in one namespace; this app reflects that reality |
 | Binary copy | Large binary files (> 10 MB) may timeout during copy/move due to HTTP limits |
 | No rename | Rename is not available; use Copy-then-Delete as a workaround |
 
@@ -225,20 +203,17 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 | MIME detection | `getMimeType` | 25 |
 | File icons | `getFileIcon` | 17 |
 | HTML escaping | `escapeHtml` | 7 |
-| Path utilities | `parentPath` | 7 |
-| Directory inference | `inferDirectories` | 7 |
-| File filtering/sorting | `filterAndSortFiles` | 9 |
+| File filtering/sorting | `filterFiles` | 10 |
 | Selection size | `computeSelectedSize` | 5 |
-| Breadcrumb HTML | `buildBreadcrumb` | 4 |
+| Finder table | `buildFinderTable` | 11 |
 | Selection options | `buildSelectionOptions` | 4 |
 | File listing API | `getFileList` | 6 |
 | Delete operation | `performDelete` | 6 |
 | Copy operation | `performCopy` | 6 |
 | Move operation | `performMove` | 3 |
-| Create folder | `createFolder` | 6 |
-| Button handlers | `appButtonHandler` | 9 |
+| Button handlers | `appButtonHandler` | 7 |
 | Hub URL/auth | `getHubBaseUrl`, `makeAuthHeaders` | 6 |
-| **Total** | | **~145 assertions** |
+| **Total** | | **130 tests, 0 failures** |
 
 ---
 
@@ -246,6 +221,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.4 | 2026-04-04 | Finder-style flat listing, version display in all pages, zero-config install, removed virtual-directory code |
 | 1.0.3 | 2026-04-04 | Updated README GitHub URLs to use the correct `brianpavane` username |
 | 1.0.2 | 2026-04-04 | Refactored main view into an Explorer-style browser table with folders and files shown together |
 | 1.0.1 | 2026-04-04 | Added clickable file-table header sorting for Name, Size, and Modified columns |

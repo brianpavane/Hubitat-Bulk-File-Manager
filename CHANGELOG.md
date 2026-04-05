@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.4] — 2026-04-04
+
+### Added
+- Finder-style flat file browser table on the main page (macOS `-apple-system` font, alternating rows, hover highlight, sort indicators)
+- Version number displayed in all page titles and the status bar
+
+### Changed
+- Main page now zero-configuration: `install: true`, all inputs `required: false`, hub connection errors handled gracefully
+- `filterFiles` replaces `filterAndSortFiles` — no `currentPath` parameter; all files treated as peers
+- `buildSelectionOptions` simplified — no path filtering, keys are full flat filenames
+- Spock test suite updated to 130 tests across 16 functional areas, 0 failures
+
+### Removed
+- All virtual-directory / subfolder simulation: `inferDirectories`, `parentPath`, `buildBreadcrumb`, `urlEncode`, `state.currentPath`
+- `newFolderPage`, `createFolder`, `btnNewFolder`, `btnCreateFolder`
+- Explorer-style `buildFileBrowserTable` and `buildSortHeaderLink` (replaced by `buildFinderTable`)
+
 ## [1.0.3] — 2026-04-04
 
 ### Changed
@@ -62,6 +79,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.4]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.4
 [1.0.3]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.3
 [1.0.2]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.2
 [1.0.1]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.1

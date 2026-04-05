@@ -1,28 +1,25 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.3
+ *  Version: 1.0.4
  *  Author:  Brian Pavane
  *
  *  Features:
- *    - Simulated directory navigation with breadcrumb trail
- *    - Real-time search / filter within the current directory
+ *    - Finder-style flat file listing on the main page
+ *    - Real-time search / filter (case-insensitive)
  *    - Sort by name, size, or date (ascending / descending)
  *    - Bulk and individual file selection (with running size total)
  *    - Delete with mandatory confirmation step
- *    - Copy and Move to a browsable destination path
- *    - Create new folder (stored as a .keep placeholder file)
+ *    - Copy and Move to a user-specified destination path
  *    - Configurable hub IP and optional security token
+ *    - Zero-configuration install — works immediately after adding
  *
  *  Architecture notes:
- *    - All file listing is retrieved via HTTP GET /hub/fileManager/json.
- *    - Uploads use the built-in uploadHubFile(name, bytes) sandbox call.
- *    - Downloads try downloadHubFile(name) first, falling back to
- *      HTTP GET /local/<name> for broader compatibility.
- *    - Deletes try the built-in deleteHubFile(name) first, falling back
- *      to HTTP POST /hub/fileManager/delete.
- *    - "Directories" are virtual: they are inferred from '/' separators
- *      embedded in flat filenames.  A new folder is created by uploading
- *      a zero-byte <folder>/.keep placeholder.
+ *    - Hubitat files are stored in a flat namespace (/local/).
+ *      There are no subdirectories; this app treats all files as peers.
+ *    - File listing: HTTP GET /hub/fileManager/json
+ *    - Upload (copy/move target): uploadHubFile(name, bytes)  [sandbox built-in]
+ *    - Download (copy/move source): downloadHubFile(name)     [sandbox, with HTTP fallback]
+ *    - Delete: deleteHubFile(name)                            [sandbox, with HTTP fallback]
  */
 
 // ════════════════════════════════════════════════════════════════
@@ -33,7 +30,7 @@ definition(
     name          : "Hubitat Bulk File Manager",
     namespace     : "bpavane",
     author        : "Brian Pavane",
-    description   : "Full-featured bulk file manager for Hubitat hub files",
+    description   : "Finder-style bulk file manager for Hubitat hub files",
     category      : "Utility",
     iconUrl       : "",
     iconX2Url     : "",
@@ -48,7 +45,6 @@ preferences {
     page(name: "mainPage",              content: "mainPage")
     page(name: "confirmDeletePage",     content: "confirmDeletePage")
     page(name: "destinationPickerPage", content: "destinationPickerPage")
-    page(name: "newFolderPage",         content: "newFolderPage")
     page(name: "settingsPage",          content: "settingsPage")
 }
 
@@ -57,36 +53,21 @@ preferences {
 // ────────────────────────────────────────────────────────────────
 
 def mainPage() {
-    // Apply navigation params supplied by href links
-    if (params?.path != null) state.currentPath = params.path
-    if (params?.sortField != null) {
-        def requestedSortField = params.sortField.toString()
-        app.updateSetting("sortField", [type: "enum", value: requestedSortField])
-        settings.sortField = requestedSortField
-    }
-    if (params?.sortDir != null) {
-        def requestedSortDir = params.sortDir.toString()
-        app.updateSetting("sortDir", [type: "enum", value: requestedSortDir])
-        settings.sortDir = requestedSortDir
-    }
-
-    def allFiles    = getFileList()
-    def currentPath = (state.currentPath ?: "").toString()
-    def sortField   = (settings.sortField  ?: "name").toString()
-    def sortDir     = (settings.sortDir    ?: "asc").toString()
-    def searchText  = (settings.searchText ?: "").toString()
-
-    def dirs      = inferDirectories(allFiles, currentPath)
-    def files     = filterAndSortFiles(allFiles, currentPath, searchText, sortField, sortDir)
+    def version   = "1.0.4"
+    def allFiles  = getFileList()
+    def sortField = (settings.sortField  ?: "name").toString()
+    def sortDir   = (settings.sortDir    ?: "asc").toString()
+    def search    = (settings.searchText ?: "").toString()
+    def files     = filterFiles(allFiles, search, sortField, sortDir)
     def selected  = (settings.selectedFiles ?: []) as List
     def selCount  = selected.size()
     def selSize   = computeSelectedSize(allFiles, selected)
-    def totalSize = (files.sum { it.size ?: 0L } ?: 0L) as Long
+    def totalSize = (allFiles.sum { it.size ?: 0L } ?: 0L) as Long
 
-    dynamicPage(name: "mainPage", title: "Hubitat Bulk File Manager",
+    dynamicPage(name: "mainPage", title: "Hubitat Bulk File Manager  \u2022  v${version}",
                 install: true, uninstall: true) {
 
-        // ── Result banner (persists until replaced by a new operation) ──
+        // ── Result banner ──────────────────────────────────────────────
         if (state.lastResult) {
             def r     = state.lastResult
             def color = r.errors ? "#c0392b" : "#27ae60"
@@ -97,23 +78,33 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
             }
         }
 
-        // ── Path breadcrumb + search ───────────────────────────────────
+        // ── Search + Sort ──────────────────────────────────────────────
         section {
-            paragraph buildBreadcrumb(currentPath)
-            paragraph "<small style='color:#777;'>Browse the current folder below. Search is optional and only filters the visible file rows.</small>"
             input "searchText", "text",
-                  title: "Search files in current folder…",
-                  required: false, submitOnChange: true, width: 8
+                  title         : "&#128269; Search files\u2026",
+                  required      : false,
+                  submitOnChange: true,
+                  width         : 6
+            input "sortField", "enum",
+                  title        : "Sort by",
+                  options      : ["name": "Name", "size": "Size", "date": "Date Modified"],
+                  defaultValue : "name",
+                  required     : false,
+                  submitOnChange: true,
+                  width        : 3
+            input "sortDir", "enum",
+                  title        : "Direction",
+                  options      : ["asc": "Ascending", "desc": "Descending"],
+                  defaultValue : "asc",
+                  required     : false,
+                  submitOnChange: true,
+                  width        : 3
         }
 
         // ── Toolbar ────────────────────────────────────────────────────
         section("Actions") {
             input "btnSelectAll",   "button", title: "&#9745; Select All",  width: 2
             input "btnDeselectAll", "button", title: "&#9744; Clear",       width: 2
-            href  "newFolderPage",
-                  title      : "&#128193; New Folder",
-                  description: "Create a subfolder in ${currentPath ?: '/'}",
-                  width      : 2
             if (selCount > 0) {
                 href "confirmDeletePage",
                      title      : "&#128465; Delete (${selCount})",
@@ -121,65 +112,50 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
                      width      : 2
                 href "destinationPickerPage",
                      title      : "&#128203; Copy (${selCount})",
-                     description: "Copy to another location",
+                     description: "Copy to another filename / path",
                      params     : [op: "copy"],
                      width      : 2
                 href "destinationPickerPage",
                      title      : "&#9986; Move (${selCount})",
-                     description: "Move to another location",
+                     description: "Move to another filename / path",
                      params     : [op: "move"],
                      width      : 2
             }
         }
 
-        // ── Sort controls ──────────────────────────────────────────────
-        section {
-            input "sortField", "enum",
-                  title        : "Sort by",
-                  options      : ["name": "Name", "size": "Size", "date": "Date Modified"],
-                  defaultValue : "name",
-                  required     : false,
-                  submitOnChange: true,
-                  width        : 4
-            input "sortDir", "enum",
-                  title        : "Direction",
-                  options      : ["asc": "Ascending", "desc": "Descending"],
-                  defaultValue : "asc",
-                  required     : false,
-                  submitOnChange: true,
-                  width        : 4
-        }
-
-        // ── Explorer-style browser table ───────────────────────────────
-        section("Browser") {
-            paragraph buildFileBrowserTable(dirs, files, currentPath, sortField, sortDir)
+        // ── Finder-style file browser ──────────────────────────────────
+        section("Files  /local/") {
+            paragraph buildFinderTable(files, sortField, sortDir)
         }
 
         // ── Selection input ────────────────────────────────────────────
-        section("Select Items") {
-            def options = buildSelectionOptions(files, currentPath)
+        section("Select Files") {
+            def options = buildSelectionOptions(files)
             if (options) {
                 input "selectedFiles", "enum",
                       title         : "${selCount} of ${options.size()} selected" +
-                                      " (${formatSize(selSize)} / ${formatSize(totalSize)})",
+                                      "  (${formatSize(selSize)} / ${formatSize(totalSize)})",
                       multiple      : true,
                       options       : options,
                       required      : false,
                       submitOnChange: true
             } else {
-                paragraph "<i style='color:#999;font-size:13px;'>No files in this location.</i>"
+                paragraph "<i style='color:#999;font-size:13px;'>No files found.</i>"
             }
         }
 
         // ── Status bar ─────────────────────────────────────────────────
         section {
             paragraph "<small style='color:#777;'>" +
-                      "${dirs.size()} folder(s) &nbsp;&#183;&nbsp; " +
-                      "${files.size()} file(s) &nbsp;&#183;&nbsp; " +
+                      "${allFiles.size()} file(s) total &nbsp;&#183;&nbsp; " +
+                      "${files.size()} shown &nbsp;&#183;&nbsp; " +
                       "Total: ${formatSize(totalSize)} &nbsp;&#183;&nbsp; " +
-                      "${selCount} selected (${formatSize(selSize)})" +
+                      "${selCount} selected (${formatSize(selSize)}) &nbsp;&#183;&nbsp; " +
+                      "v${version}" +
                       "</small>"
-            href "settingsPage", title: "&#9881; Settings", description: "Hub connection and display settings"
+            href "settingsPage",
+                 title      : "&#9881; Settings",
+                 description: "Hub connection and display settings"
         }
     }
 }
@@ -192,7 +168,7 @@ def confirmDeletePage() {
     def toDelete  = (settings.selectedFiles ?: []) as List
     def completed = state.deleteResult != null
 
-    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete",
+    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.4",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -203,21 +179,16 @@ def confirmDeletePage() {
 background:#fafafa;border-radius:3px;font-size:13px;">\
 ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
             }
-            // Promote to mainPage banner and clear local flag
-            state.lastResult  = state.deleteResult
+            state.lastResult   = state.deleteResult
             state.deleteResult = null
             section {
-                href "mainPage",
-                     title      : "&#8592; Back to File Manager",
-                     description: "",
-                     params     : [path: state.currentPath ?: ""]
+                href "mainPage", title: "&#8592; Back to File Manager", description: ""
             }
         } else {
             if (!toDelete) {
                 section {
                     paragraph "No files are selected. Go back and select items first."
-                    href "mainPage", title: "&#8592; Back", description: "",
-                         params: [path: state.currentPath ?: ""]
+                    href "mainPage", title: "&#8592; Back", description: ""
                 }
                 return
             }
@@ -228,10 +199,7 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
             }
             section {
                 input "btnConfirmDelete", "button", title: "&#128465; Yes, Delete All"
-                href  "mainPage",
-                      title      : "&#10005; Cancel",
-                      description: "",
-                      params     : [path: state.currentPath ?: ""]
+                href  "mainPage", title: "&#10005; Cancel", description: ""
             }
         }
     }
@@ -242,20 +210,13 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
 // ────────────────────────────────────────────────────────────────
 
 def destinationPickerPage() {
-    // First entry from mainPage carries the op type; reset picker path
-    if (params?.op) {
-        state.pendingOp      = params.op
-        state.destPickerPath = state.currentPath ?: ""
-    }
-    // Subsequent navigation within the picker updates the path
-    if (params?.destPath != null) state.destPickerPath = params.destPath
+    if (params?.op) state.pendingOp = params.op
 
-    def op         = (state.pendingOp      ?: "copy").toString()
-    def pickerPath = (state.destPickerPath ?: "").toString()
-    def completed  = state.opResult != null
+    def op        = (state.pendingOp ?: "copy").toString()
+    def completed = state.opResult != null
 
     dynamicPage(name: "destinationPickerPage",
-                title: "${op.capitalize()} — Choose Destination",
+                title: "${op.capitalize()} Files  \u2022  v1.0.4",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -266,96 +227,27 @@ def destinationPickerPage() {
 background:#fafafa;border-radius:3px;font-size:13px;">\
 ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
             }
-            state.lastResult     = state.opResult
-            state.opResult       = null
-            state.pendingOp      = null
-            state.destPickerPath = null
+            state.lastResult = state.opResult
+            state.opResult   = null
+            state.pendingOp  = null
             section {
-                href "mainPage",
-                     title      : "&#8592; Back to File Manager",
-                     description: "",
-                     params     : [path: state.currentPath ?: ""]
+                href "mainPage", title: "&#8592; Back to File Manager", description: ""
             }
         } else {
-            def allFiles = getFileList()
-            def dirs     = inferDirectories(allFiles, pickerPath)
-
-            section("Navigate to Destination") {
-                paragraph buildBreadcrumb(pickerPath)
-                if (pickerPath) {
-                    href "destinationPickerPage",
-                         title      : "&#128193; ..",
-                         description: "Up to: ${parentPath(pickerPath) ?: '/'}",
-                         params     : [destPath: parentPath(pickerPath), op: op]
-                }
-                dirs.each { dir ->
-                    href "destinationPickerPage",
-                         title      : "&#128193; ${dir}/",
-                         description: "Navigate into folder",
-                         params     : [destPath: "${pickerPath}${dir}/", op: op]
-                }
-                if (dirs.isEmpty() && !pickerPath) {
-                    paragraph "<i style='color:#999;font-size:13px;'>No subfolders found at root. " +
-                              "Type a destination path below or use root (/).</i>"
-                }
-            }
-
             def srcFiles = (settings.selectedFiles ?: []) as List
-            section("Confirm ${op.capitalize()} Here") {
+            section("${op.capitalize()} ${srcFiles.size()} file(s)") {
+                paragraph "<b>Files to ${op}:</b><ul style='margin:4px 0;font-size:13px;'>" +
+                          srcFiles.collect { "<li>${escapeHtml(it?.toString())}</li>" }.join("") +
+                          "</ul>"
                 input "destPath", "text",
-                      title       : "Destination path (edit if needed)",
-                      defaultValue: pickerPath,
-                      required    : true
-                paragraph "<small>${srcFiles.size()} file(s) will be ${op}d to the path above.</small>"
-                input "btnConfirmOp", "button", title: "&#10003; Confirm ${op.capitalize()}"
-                href  "mainPage",
-                      title      : "&#10005; Cancel",
-                      description: "",
-                      params     : [path: state.currentPath ?: ""]
-            }
-        }
-    }
-}
-
-// ────────────────────────────────────────────────────────────────
-//  newFolderPage
-// ────────────────────────────────────────────────────────────────
-
-def newFolderPage() {
-    def completed = state.folderResult != null
-
-    dynamicPage(name: "newFolderPage", title: "Create New Folder",
-                install: false, uninstall: false) {
-
-        if (completed) {
-            def r     = state.folderResult
-            def color = r.errors ? "#c0392b" : "#27ae60"
-            section("Result") {
-                paragraph """<div style="padding:10px 14px;border-left:5px solid ${color};\
-background:#fafafa;border-radius:3px;font-size:13px;">\
-${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
-            }
-            state.lastResult   = state.folderResult
-            state.folderResult = null
-            section {
-                href "mainPage",
-                     title      : "&#8592; Back to File Manager",
-                     description: "",
-                     params     : [path: state.currentPath ?: ""]
-            }
-        } else {
-            def parent = state.currentPath ?: "/"
-            section("New Folder under: ${parent}") {
-                input "newFolderName", "text",
-                      title   : "Folder name",
+                      title   : "Destination path or prefix",
                       required: true
-                paragraph "<small style='color:#777;'>Allowed characters: letters, numbers, hyphens, " +
-                          "underscores.  Other characters are converted to underscores.</small>"
-                input "btnCreateFolder", "button", title: "&#128193; Create Folder"
-                href  "mainPage",
-                      title      : "&#10005; Cancel",
-                      description: "",
-                      params     : [path: state.currentPath ?: ""]
+                paragraph """<small style='color:#777;'>
+Examples: <code>backup/photo.jpg</code> (single file) or <code>backup</code> (prefix \u2014 each file \
+is ${op}d to <code>backup/filename</code>).  Hubitat files are stored flat; \
+any <code>/</code> in the name is part of the filename.</small>"""
+                input "btnConfirmOp", "button", title: "&#10003; Confirm ${op.capitalize()}"
+                href  "mainPage", title: "&#10005; Cancel", description: ""
             }
         }
     }
@@ -366,28 +258,25 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
 // ────────────────────────────────────────────────────────────────
 
 def settingsPage() {
-    dynamicPage(name: "settingsPage", title: "Settings",
+    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.4",
                 install: false, uninstall: false) {
 
         section("Hub Connection") {
-            paragraph "The app calls the hub's local file manager API at " +
+            paragraph "Calls the hub\u2019s local file manager API at " +
                       "<code>/hub/fileManager/json</code>.  Leave the IP blank to auto-detect.  " +
-                      "If hub security is enabled, paste your access token below."
+                      "A security token is only needed if hub login is enabled."
             input "hubIp",    "text",     title: "Hub IP Address (blank = auto-detect)", required: false
             input "hubToken", "password", title: "Hub Security Token (optional)",        required: false
         }
         section("Display") {
             input "maxFiles", "number",
-                  title       : "Max files shown per directory",
+                  title       : "Max files shown",
                   defaultValue: 200,
                   range       : "10..2000",
                   required    : false
         }
         section {
-            href "mainPage",
-                 title      : "&#8592; Back to File Manager",
-                 description: "",
-                 params     : [path: state.currentPath ?: ""]
+            href "mainPage", title: "&#8592; Back to File Manager", description: ""
         }
     }
 }
@@ -397,19 +286,16 @@ def settingsPage() {
 // ════════════════════════════════════════════════════════════════
 
 def appButtonHandler(String btn) {
-    log.debug "Bulk File Manager — button: ${btn}"
+    log.debug "Bulk File Manager \u2014 button: ${btn}"
     switch (btn) {
 
-        // ── Selection ──────────────────────────────────────────────────
         case "btnSelectAll":
-            def allFiles    = getFileList()
-            def currentPath = (state.currentPath ?: "").toString()
-            def files       = filterAndSortFiles(
-                                allFiles, currentPath,
-                                (settings.searchText ?: "").toString(),
-                                (settings.sortField  ?: "name").toString(),
-                                (settings.sortDir    ?: "asc").toString())
-            def allKeys = buildSelectionOptions(files, currentPath).keySet().toList()
+            def allFiles = getFileList()
+            def files    = filterFiles(allFiles,
+                               (settings.searchText ?: "").toString(),
+                               (settings.sortField  ?: "name").toString(),
+                               (settings.sortDir    ?: "asc").toString())
+            def allKeys  = buildSelectionOptions(files).keySet().toList()
             app.updateSetting("selectedFiles", [type: "enum", value: allKeys])
             break
 
@@ -417,7 +303,6 @@ def appButtonHandler(String btn) {
             app.updateSetting("selectedFiles", [type: "enum", value: []])
             break
 
-        // ── Delete (confirmed) ─────────────────────────────────────────
         case "btnConfirmDelete":
             def toDelete = (settings.selectedFiles ?: []) as List
             state.deleteResult = performDelete(toDelete)
@@ -426,28 +311,21 @@ def appButtonHandler(String btn) {
             }
             break
 
-        // ── Copy / Move (confirmed) ────────────────────────────────────
         case "btnConfirmOp":
             def srcFiles = (settings.selectedFiles ?: []) as List
             def dest     = (settings.destPath ?: "").toString().trim()
-            def op       = (state.pendingOp  ?: "copy").toString()
+            def op       = (state.pendingOp   ?: "copy").toString()
             state.opResult = (op == "move") ? performMove(srcFiles, dest)
                                             : performCopy(srcFiles, dest)
             if (!state.opResult.errors && op == "move") {
                 app.updateSetting("selectedFiles", [type: "enum", value: []])
             }
             app.updateSetting("destPath", [type: "text", value: ""])
-            break
-
-        // ── Create folder ──────────────────────────────────────────────
-        case "btnCreateFolder":
-            def name = (settings.newFolderName ?: "").toString().trim()
-            state.folderResult = createFolder(name)
-            app.updateSetting("newFolderName", [type: "text", value: ""])
+            state.pendingOp = null
             break
 
         default:
-            log.warn "Bulk File Manager — unhandled button: ${btn}"
+            log.warn "Bulk File Manager \u2014 unhandled button: ${btn}"
     }
 }
 
@@ -456,21 +334,19 @@ def appButtonHandler(String btn) {
 // ════════════════════════════════════════════════════════════════
 
 def installed() {
-    log.info "Hubitat Bulk File Manager installed"
+    log.info "Hubitat Bulk File Manager v1.0.4 installed"
     initialize()
 }
 
 def updated() {
-    log.info "Hubitat Bulk File Manager updated"
+    log.info "Hubitat Bulk File Manager v1.0.4 updated"
     initialize()
 }
 
 def initialize() {
-    if (state.currentPath  == null) state.currentPath  = ""
     state.lastResult   = null
     state.deleteResult = null
     state.opResult     = null
-    state.folderResult = null
     state.pendingOp    = null
 }
 
@@ -479,7 +355,7 @@ def initialize() {
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Returns the full flat file list from the hub's file manager API.
+ * Returns the flat file list from the hub's file manager API.
  * Each entry: [name: String, size: Long, date: String, mimeType: String]
  */
 def getFileList() {
@@ -495,7 +371,6 @@ def getFileList() {
                 return
             }
             def data = resp.data
-            // API may return a list directly or wrap it in { fileList: [...] }
             def list = (data instanceof List) ? data : (data?.fileList ?: [])
             files = list.collect { f ->
                 def n = (f.name ?: "").toString()
@@ -514,13 +389,11 @@ def getFileList() {
 }
 
 /**
- * Deletes each file in fileNames.
- * Tries the built-in sandbox call first; falls back to HTTP POST.
+ * Deletes each file. Tries the built-in sandbox call first; falls back to HTTP POST.
  */
 def performDelete(List fileNames) {
     def deleted = 0
     def errors  = []
-
     fileNames.each { raw ->
         def name = raw?.toString()?.trim()
         if (!name) return
@@ -544,11 +417,10 @@ def performDelete(List fileNames) {
             }
         }
     }
-
     def n = fileNames.size()
     return [
         message: errors ? "Deleted ${deleted} of ${n} item(s). " +
-                          "Failed: ${errors.take(5).join(', ')}${errors.size() > 5 ? '…' : ''}"
+                          "Failed: ${errors.take(5).join(', ')}${errors.size() > 5 ? '\u2026' : ''}"
                         : "Deleted ${deleted} item(s) successfully.",
         errors : !errors.isEmpty()
     ]
@@ -562,9 +434,8 @@ def performCopy(List fileNames, String destPath) {
     def copied = 0
     def errors = []
     def dest   = destPath?.replaceAll('/+$', '') ?: ""
-
     fileNames.each { raw ->
-        def srcName = raw?.toString()?.trim()
+        def srcName  = raw?.toString()?.trim()
         if (!srcName) return
         def baseName = srcName.contains("/") ? srcName.tokenize("/").last() : srcName
         def destName = dest ? "${dest}/${baseName}" : baseName
@@ -578,11 +449,10 @@ def performCopy(List fileNames, String destPath) {
             errors << srcName
         }
     }
-
     def n = fileNames.size()
     return [
         message: errors ? "Copied ${copied} of ${n} file(s). " +
-                          "Failed: ${errors.take(5).join(', ')}${errors.size() > 5 ? '…' : ''}"
+                          "Failed: ${errors.take(5).join(', ')}${errors.size() > 5 ? '\u2026' : ''}"
                         : "Copied ${copied} file(s) to ${dest ?: '/'} successfully.",
         errors : !errors.isEmpty()
     ]
@@ -590,13 +460,13 @@ def performCopy(List fileNames, String destPath) {
 
 /**
  * Moves each file to destPath.
- * Only deletes sources if ALL copies succeed (safe-move semantics).
+ * Safe-move: sources are only deleted after ALL copies succeed.
  */
 def performMove(List fileNames, String destPath) {
     def copyResult = performCopy(fileNames, destPath)
     if (copyResult.errors) {
         return [
-            message: "Move aborted: copy step had errors — no originals deleted. ${copyResult.message}",
+            message: "Move aborted: copy step had errors \u2014 no originals deleted. ${copyResult.message}",
             errors : true
         ]
     }
@@ -606,25 +476,6 @@ def performMove(List fileNames, String destPath) {
                  (deleteResult.errors ? " Warning: some source files could not be removed." : ""),
         errors : deleteResult.errors
     ]
-}
-
-/**
- * Creates a new virtual folder by uploading a zero-byte .keep placeholder.
- */
-def createFolder(String folderName) {
-    if (!folderName?.trim()) {
-        return [message: "Folder name cannot be empty.", errors: true]
-    }
-    def clean       = folderName.replaceAll(/[^a-zA-Z0-9_\-]/, "_")
-    def currentPath = (state.currentPath ?: "").toString()
-    def placeholder = "${currentPath}${clean}/.keep"
-    try {
-        uploadHubFile(placeholder, new byte[0])
-        return [message: "Folder '${clean}' created at ${currentPath ?: '/'}.", errors: false]
-    } catch (e) {
-        log.error "createFolder: ${e.message}"
-        return [message: "Failed to create folder '${clean}': ${e.message}", errors: true]
-    }
 }
 
 /**
@@ -657,21 +508,15 @@ def downloadFileBytes(String filename) {
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Returns files that are direct children of currentPath
- * (no deeper nesting), optionally matching a search term,
- * sorted by sortField in sortDir order.
+ * Returns the filtered and sorted file list.
+ * Hubitat's file store is flat — no path-based filtering is needed.
  */
-def filterAndSortFiles(List allFiles, String currentPath,
-                       String search, String sortField, String sortDir) {
+def filterFiles(List allFiles, String search, String sortField, String sortDir) {
     def maxRaw   = (settings.maxFiles ?: 200) as int
     def max      = Math.max(10, Math.min(2000, maxRaw))
     def filtered = allFiles.findAll { f ->
-        def name = (f.name ?: "").toString()
-        if (!name.startsWith(currentPath)) return false
-        def remainder = name.substring(currentPath.length())
-        if (!remainder || remainder.contains("/")) return false   // skip dirs and self
-        if (search) return remainder.toLowerCase().contains(search.toLowerCase())
-        return true
+        if (!search?.trim()) return true
+        (f.name ?: "").toLowerCase().contains(search.toLowerCase())
     }
     filtered.sort { a, b ->
         def av, bv
@@ -686,22 +531,7 @@ def filterAndSortFiles(List allFiles, String currentPath,
 }
 
 /**
- * Returns sorted list of virtual sub-directory names directly under currentPath.
- */
-def inferDirectories(List allFiles, String currentPath) {
-    def dirs = [] as Set
-    allFiles.each { f ->
-        def name = (f.name ?: "").toString()
-        if (!name.startsWith(currentPath)) return
-        def remainder = name.substring(currentPath.length())
-        def parts = remainder.tokenize("/")
-        if (parts.size() > 1) dirs << parts[0]
-    }
-    return dirs.sort()
-}
-
-/**
- * Sums sizes of the selected files (by name key in allFiles).
+ * Sums the sizes of the selected files (matched by name key in allFiles).
  */
 def computeSelectedSize(List allFiles, List selected) {
     if (!selected) return 0L
@@ -713,80 +543,54 @@ def computeSelectedSize(List allFiles, List selected) {
 //  UI BUILDERS
 // ════════════════════════════════════════════════════════════════
 
-def buildBreadcrumb(String path) {
-    def sb = new StringBuilder()
-    sb.append("<div style='font-family:monospace;font-size:13px;padding:4px 0;'>")
-    sb.append("&#128194; <b>/local</b>")
-    if (path) {
-        path.replaceAll('/+$', '').tokenize("/").each { part ->
-            sb.append(" <span style='color:#aaa;'>&#8250;</span> <b>${escapeHtml(part)}</b>")
-        }
-    }
-    sb.append("</div>")
-    return sb.toString()
-}
-
 /**
- * Renders the file listing as an HTML table (display only — selection
- * is handled separately by the enum input below the table).
+ * Renders the flat file list as a Finder-style HTML table.
+ * Sort indicators appear on the active column header.
  */
-def buildFileBrowserTable(List dirs, List files, String currentPath,
-                          String sortField = "name", String sortDir = "asc") {
-    def hasParent = !!currentPath
-    if (!hasParent && dirs.isEmpty() && files.isEmpty()) {
-        return "<i style='color:#999;font-size:13px;'>This location is empty.</i>"
+def buildFinderTable(List files, String sortField = "name", String sortDir = "asc") {
+    if (files.isEmpty()) {
+        return """<div style="padding:30px;text-align:center;color:#aaa;font-size:13px;\
+background:#fafafa;border-radius:6px;border:1px dashed #ddd;">
+&#128194; No files found.</div>"""
     }
+
+    def nameCls  = sortField == "name" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
+    def sizeCls  = sortField == "size" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
+    def dateCls  = sortField == "date" ? (sortDir == "asc" ? "sort-asc" : "sort-desc") : ""
+
     def sb = new StringBuilder()
     sb.append("""<style>
-.fmtbl{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;}
-.fmtbl th{background:#3c3f41;color:#eee;padding:5px 8px;text-align:left;}
-.fmtbl td{padding:4px 8px;border-bottom:1px solid #eee;vertical-align:middle;}
-.fmtbl tr:hover td{background:#f0f4ff;}
-.fmtbl .sz{text-align:right;}
-.fmtbl .dt{color:#888;}
-.fmtbl .mt{color:#aaa;font-size:11px;}
-.fmtbl th a{color:#eee;text-decoration:none;display:block;}
-.fmtbl th a:hover{text-decoration:underline;}
-.fmtbl .nav a,.fmtbl .nm a{color:#2c3e50;text-decoration:none;display:block;}
-.fmtbl .nav a:hover,.fmtbl .nm a:hover{text-decoration:underline;}
+.fdr{width:100%;border-collapse:collapse;font-size:13px;\
+font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;}
+.fdr thead tr{background:#efefef;}
+.fdr th{padding:7px 10px;text-align:left;border-bottom:2px solid #d4d4d4;\
+font-weight:600;color:#333;white-space:nowrap;user-select:none;}
+.fdr th.sz{text-align:right;}
+.fdr td{padding:5px 10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}
+.fdr tr:hover td{background:#e8f0fe;}
+.fdr .sz{text-align:right;font-family:monospace;font-size:12px;color:#555;}
+.fdr .dt{color:#777;font-size:12px;}
+.fdr .mt{color:#bbb;font-size:11px;}
+.fdr .ic{width:30px;text-align:center;font-size:15px;}
+.sort-asc::after{content:' \u25b2';font-size:10px;}
+.sort-desc::after{content:' \u25bc';font-size:10px;}
 </style>
-<table class='fmtbl'>
+<table class='fdr'>
 <thead><tr>
+  <th class='ic'></th>
+  <th class='${nameCls}'>Name</th>
   <th>Type</th>
-  <th>${buildSortHeaderLink("Name", "name", currentPath, sortField, sortDir)}</th>
-  <th>MIME Type</th>
-  <th class='sz'>${buildSortHeaderLink("Size", "size", currentPath, sortField, sortDir)}</th>
-  <th>${buildSortHeaderLink("Modified", "date", currentPath, sortField, sortDir)}</th>
-</tr></thead><tbody>""")
+  <th class='sz ${sizeCls}'>Size</th>
+  <th class='${dateCls}'>Modified</th>
+</tr></thead>
+<tbody>""")
 
-    if (hasParent) {
-        def parent = parentPath(currentPath)
-        sb.append("""<tr>
-<td class='nav'>&#128193;</td>
-<td class='nm'><a href='?path=${urlEncode(parent)}'>&#128193; ..</a></td>
-<td class='mt'>Folder</td>
-<td class='sz'>-</td>
-<td class='dt'>Up to ${escapeHtml(parent ?: '/')}</td>
-</tr>""")
-    }
-
-    dirs.each { dir ->
-        def fullPath = "${currentPath}${dir}/"
-        sb.append("""<tr>
-<td class='nav'>&#128193;</td>
-<td class='nm'><a href='?path=${urlEncode(fullPath)}'>&#128193; ${escapeHtml(dir)}</a></td>
-<td class='mt'>Folder</td>
-<td class='sz'>-</td>
-<td class='dt'>Folder</td>
-</tr>""")
-    }
-
-    files.each { f ->
-        def name = f.name.substring(currentPath.length())
-        sb.append("""<tr>
-<td>${getFileIcon(f.mimeType)}</td>
-<td>${escapeHtml(name)}</td>
-<td class='mt'>${f.mimeType ?: '—'}</td>
+    files.eachWithIndex { f, i ->
+        def bg = (i % 2 == 1) ? " style='background:#f9f9f9;'" : ""
+        sb.append("""<tr${bg}>
+<td class='ic'>${getFileIcon(f.mimeType)}</td>
+<td>${escapeHtml(f.name)}</td>
+<td class='mt'>${escapeHtml(f.mimeType ?: '\u2014')}</td>
 <td class='sz'>${formatSize(f.size ?: 0L)}</td>
 <td class='dt'>${formatDate(f.date ?: '')}</td>
 </tr>""")
@@ -795,26 +599,15 @@ def buildFileBrowserTable(List dirs, List files, String currentPath,
     return sb.toString()
 }
 
-def buildSortHeaderLink(String label, String field, String currentPath,
-                        String activeSortField = "name", String activeSortDir = "asc") {
-    def nextDir   = (activeSortField == field && activeSortDir == "asc") ? "desc" : "asc"
-    def indicator = (activeSortField == field) ? (activeSortDir == "asc" ? " &#9650;" : " &#9660;") : ""
-    def pathPart  = currentPath ? "&path=${urlEncode(currentPath)}" : ""
-    return "<a href='?sortField=${urlEncode(field)}&sortDir=${urlEncode(nextDir)}${pathPart}'>" +
-           "${escapeHtml(label)}${indicator}</a>"
-}
-
 /**
  * Builds the options map for the selectedFiles enum input.
- * Keys are the full file names (used in all operations).
- * Labels include icon, short name, size, and date for context.
+ * Key = full filename; label = icon + name + size + date.
  */
-def buildSelectionOptions(List files, String currentPath) {
+def buildSelectionOptions(List files) {
     def options = [:]
     files.each { f ->
-        def shortName = f.name.substring(currentPath.length())
-        def label     = "${getFileIcon(f.mimeType)} ${shortName}" +
-                        "   (${formatSize(f.size ?: 0L)}, ${formatDate(f.date ?: '')})"
+        def label = "${getFileIcon(f.mimeType)} ${f.name}" +
+                    "   (${formatSize(f.size ?: 0L)}, ${formatDate(f.date ?: '')})"
         options[f.name] = label
     }
     return options
@@ -823,14 +616,6 @@ def buildSelectionOptions(List files, String currentPath) {
 // ════════════════════════════════════════════════════════════════
 //  UTILITY HELPERS
 // ════════════════════════════════════════════════════════════════
-
-def parentPath(String path) {
-    if (!path) return ""
-    def parts = path.replaceAll('/+$', '').tokenize("/")
-    if (parts.size() <= 1) return ""
-    parts.removeLast()
-    return parts.join("/") + "/"
-}
 
 def formatSize(Long bytes) {
     if (!bytes || bytes < 0L) return "0 B"
@@ -841,7 +626,7 @@ def formatSize(Long bytes) {
 }
 
 def formatDate(String dateStr) {
-    if (!dateStr?.trim()) return "—"
+    if (!dateStr?.trim()) return "\u2014"
     try {
         def sdf1 = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
         def sdf2 = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm")
@@ -855,50 +640,39 @@ def getMimeType(String filename) {
     if (!filename) return "application/octet-stream"
     def ext = filename.tokenize(".").last()?.toLowerCase() ?: ""
     return ([
-        // Images
         png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
         gif: "image/gif", svg: "image/svg+xml", ico: "image/x-icon",
         webp: "image/webp", bmp: "image/bmp",
-        // Text / Code
         txt: "text/plain", csv: "text/csv", md: "text/markdown",
         html: "text/html", htm: "text/html", css: "text/css",
         js: "application/javascript", groovy: "text/x-groovy",
-        // Data
         json: "application/json", xml: "application/xml",
-        // Documents
         pdf: "application/pdf",
-        // Archives
         zip: "application/zip", gz: "application/gzip",
         tar: "application/x-tar", jar: "application/java-archive"
     ][ext]) ?: "application/octet-stream"
 }
 
 def getFileIcon(String mimeType) {
-    if (!mimeType) return "&#128196;"          // 📄
-    // Images first so image/svg+xml doesn't fall through to the xml code-check below
-    if (mimeType.startsWith("image/"))  return "&#128247;"  // 🖼
-    // Code/data types — checked before text/* so groovy/js/json/xml win over plain 📝
+    if (!mimeType) return "&#128196;"
+    if (mimeType.startsWith("image/"))  return "&#128247;"   // 🖼
     if (mimeType.contains("json")  ||
         mimeType.contains("xml")   ||
         mimeType.contains("javascript") ||
-        mimeType.contains("groovy")) return "&#9881;"       // ⚙️
-    if (mimeType.startsWith("text/"))   return "&#128221;"  // 📝
-    if (mimeType.startsWith("audio/"))  return "&#127925;"  // 🎵
-    if (mimeType.startsWith("video/"))  return "&#127916;"  // 🎬
-    if (mimeType.contains("pdf"))       return "&#128213;"  // 📕
+        mimeType.contains("groovy")) return "&#9881;"         // ⚙️
+    if (mimeType.startsWith("text/"))   return "&#128221;"   // 📝
+    if (mimeType.startsWith("audio/"))  return "&#127925;"   // 🎵
+    if (mimeType.startsWith("video/"))  return "&#127916;"   // 🎬
+    if (mimeType.contains("pdf"))       return "&#128213;"   // 📕
     if (mimeType.contains("zip")   ||
         mimeType.contains("tar")   ||
         mimeType.contains("gzip")  ||
-        mimeType.contains("archive")) return "&#128230;"    // 📦
-    return "&#128196;"                                       // 📄
+        mimeType.contains("archive")) return "&#128230;"     // 📦
+    return "&#128196;"                                        // 📄
 }
 
 def escapeHtml(String s) {
     s?.replace("&", "&amp;")?.replace("<", "&lt;")?.replace(">", "&gt;") ?: ""
-}
-
-def urlEncode(String s) {
-    java.net.URLEncoder.encode(s ?: "", "UTF-8").replace("+", "%20")
 }
 
 def getHubBaseUrl() {
