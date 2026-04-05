@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.1  
+**Version:** 1.0.2  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -14,6 +14,7 @@ A full-featured file manager application for the Hubitat Elevation hub, providin
 | Feature | Description |
 |---|---|
 | **Directory navigation** | Simulated folder tree inferred from `/`-separated filenames with breadcrumb trail |
+| **Explorer-style browser** | Main screen shows folders and files together in a Finder/Explorer-like table |
 | **Search / filter** | Real-time case-insensitive search within the current directory |
 | **Sorting** | Sort by name, size, or date — ascending or descending |
 | **Header sorting** | Click Name, Size, or Modified column headers to toggle sort direction |
@@ -247,6 +248,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.2 | 2026-04-04 | Refactored main view into an Explorer-style browser table with folders and files shown together |
 | 1.0.1 | 2026-04-04 | Added clickable file-table header sorting for Name, Size, and Modified columns |
 | 1.0.0 | 2026-04-04 | Initial release |
 

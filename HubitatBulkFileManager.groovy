@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.1
+ *  Version: 1.0.2
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -100,6 +100,7 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
         // ── Path breadcrumb + search ───────────────────────────────────
         section {
             paragraph buildBreadcrumb(currentPath)
+            paragraph "<small style='color:#777;'>Browse the current folder below. Search is optional and only filters the visible file rows.</small>"
             input "searchText", "text",
                   title: "Search files in current folder…",
                   required: false, submitOnChange: true, width: 8
@@ -149,28 +150,9 @@ ${r.errors ? "&#9888;" : "&#10003;"}&nbsp;${r.message}</div>"""
                   width        : 4
         }
 
-        // ── Directory navigation links ─────────────────────────────────
-        if (currentPath || !dirs.isEmpty()) {
-            section("Folders") {
-                if (currentPath) {
-                    def parent = parentPath(currentPath)
-                    href "mainPage",
-                         title      : "&#128193; ..",
-                         description: "Up to: ${parent ?: '/'}",
-                         params     : [path: parent]
-                }
-                dirs.each { dir ->
-                    href "mainPage",
-                         title      : "&#128193; ${dir}/",
-                         description: "Open folder",
-                         params     : [path: "${currentPath}${dir}/"]
-                }
-            }
-        }
-
-        // ── File listing table (display only) ─────────────────────────
-        section("Files") {
-            paragraph buildFileTable(files, currentPath, sortField, sortDir)
+        // ── Explorer-style browser table ───────────────────────────────
+        section("Browser") {
+            paragraph buildFileBrowserTable(dirs, files, currentPath, sortField, sortDir)
         }
 
         // ── Selection input ────────────────────────────────────────────
@@ -748,9 +730,11 @@ def buildBreadcrumb(String path) {
  * Renders the file listing as an HTML table (display only — selection
  * is handled separately by the enum input below the table).
  */
-def buildFileTable(List files, String currentPath, String sortField = "name", String sortDir = "asc") {
-    if (files.isEmpty()) {
-        return "<i style='color:#999;font-size:13px;'>No files in this location.</i>"
+def buildFileBrowserTable(List dirs, List files, String currentPath,
+                          String sortField = "name", String sortDir = "asc") {
+    def hasParent = !!currentPath
+    if (!hasParent && dirs.isEmpty() && files.isEmpty()) {
+        return "<i style='color:#999;font-size:13px;'>This location is empty.</i>"
     }
     def sb = new StringBuilder()
     sb.append("""<style>
@@ -763,21 +747,45 @@ def buildFileTable(List files, String currentPath, String sortField = "name", St
 .fmtbl .mt{color:#aaa;font-size:11px;}
 .fmtbl th a{color:#eee;text-decoration:none;display:block;}
 .fmtbl th a:hover{text-decoration:underline;}
+.fmtbl .nav a,.fmtbl .nm a{color:#2c3e50;text-decoration:none;display:block;}
+.fmtbl .nav a:hover,.fmtbl .nm a:hover{text-decoration:underline;}
 </style>
 <table class='fmtbl'>
 <thead><tr>
-  <th>#</th>
+  <th>Type</th>
   <th>${buildSortHeaderLink("Name", "name", currentPath, sortField, sortDir)}</th>
   <th>MIME Type</th>
   <th class='sz'>${buildSortHeaderLink("Size", "size", currentPath, sortField, sortDir)}</th>
   <th>${buildSortHeaderLink("Modified", "date", currentPath, sortField, sortDir)}</th>
 </tr></thead><tbody>""")
 
-    files.eachWithIndex { f, i ->
+    if (hasParent) {
+        def parent = parentPath(currentPath)
+        sb.append("""<tr>
+<td class='nav'>&#128193;</td>
+<td class='nm'><a href='?path=${urlEncode(parent)}'>&#128193; ..</a></td>
+<td class='mt'>Folder</td>
+<td class='sz'>-</td>
+<td class='dt'>Up to ${escapeHtml(parent ?: '/')}</td>
+</tr>""")
+    }
+
+    dirs.each { dir ->
+        def fullPath = "${currentPath}${dir}/"
+        sb.append("""<tr>
+<td class='nav'>&#128193;</td>
+<td class='nm'><a href='?path=${urlEncode(fullPath)}'>&#128193; ${escapeHtml(dir)}</a></td>
+<td class='mt'>Folder</td>
+<td class='sz'>-</td>
+<td class='dt'>Folder</td>
+</tr>""")
+    }
+
+    files.each { f ->
         def name = f.name.substring(currentPath.length())
         sb.append("""<tr>
-<td style='color:#bbb;'>${i + 1}</td>
-<td>${getFileIcon(f.mimeType)}&nbsp;${escapeHtml(name)}</td>
+<td>${getFileIcon(f.mimeType)}</td>
+<td>${escapeHtml(name)}</td>
 <td class='mt'>${f.mimeType ?: '—'}</td>
 <td class='sz'>${formatSize(f.size ?: 0L)}</td>
 <td class='dt'>${formatDate(f.date ?: '')}</td>

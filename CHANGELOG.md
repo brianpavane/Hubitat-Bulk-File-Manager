@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.2] — 2026-04-04
+
+### Added
+- Explorer-style browser table on the main page with folders and files shown together
+- Parent-folder row (`..`) inside the main listing for filesystem-style navigation
+
+### Changed
+- Main screen now shows directory contents immediately without requiring search
+- Search remains optional and only filters the visible file rows in the current folder
+- Spock test suite expanded to 156 tests, 0 failures
+
 ## [1.0.1] — 2026-04-04
 
 ### Added
@@ -41,9 +52,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - This project is a single-file Hubitat Groovy app; there is no `package.json`.  
-  Version is tracked in the file header (`Version: 1.0.1`) and in this changelog.
+  Version is tracked in the file header (`Version: 1.0.2`) and in this changelog.
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.2]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.2
 [1.0.1]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.1
 [1.0.0]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.0

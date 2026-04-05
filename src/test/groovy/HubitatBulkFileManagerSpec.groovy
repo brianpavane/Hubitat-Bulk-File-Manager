@@ -555,7 +555,7 @@ class HubitatBulkFileManagerSpec extends Specification {
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  11b. buildSortHeaderLink / buildFileTable sorting headers
+    //  11b. buildSortHeaderLink / buildFileBrowserTable sorting headers
     // ════════════════════════════════════════════════════════════════
 
     def 'buildSortHeaderLink: active ascending sort shows up-arrow and toggles to desc'() {
@@ -576,18 +576,48 @@ class HubitatBulkFileManagerSpec extends Specification {
         html.contains('?sortField=size&sortDir=asc')
     }
 
-    def 'buildFileTable: renders clickable sort headers for name size and modified date'() {
+    def 'buildFileBrowserTable: renders clickable sort headers for name size and modified date'() {
         given:
         def files = [[name: 'docs/readme.txt', size: 512L,
                       date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
 
         when:
-        def html = app.buildFileTable(files, 'docs/', 'name', 'asc')
+        def html = app.buildFileBrowserTable([], files, 'docs/', 'name', 'asc')
 
         then:
         html.contains('?sortField=name&sortDir=desc&path=docs%2F')
         html.contains('?sortField=size&sortDir=asc&path=docs%2F')
         html.contains('?sortField=date&sortDir=asc&path=docs%2F')
+    }
+
+    def 'buildFileBrowserTable: shows parent folder row when inside a subfolder'() {
+        when:
+        def html = app.buildFileBrowserTable([], [], 'docs/archive/', 'name', 'asc')
+
+        then:
+        html.contains('&#128193; ..')
+        html.contains('?path=docs%2F')
+        html.contains('Up to docs/')
+    }
+
+    def 'buildFileBrowserTable: shows folders and files in one listing'() {
+        given:
+        def files = [[name: 'docs/readme.txt', size: 512L,
+                      date: '2026-01-01 00:00:00', mimeType: 'text/plain']]
+
+        when:
+        def html = app.buildFileBrowserTable(['archive'], files, 'docs/', 'name', 'asc')
+
+        then:
+        html.contains('?path=docs%2Farchive%2F')
+        html.contains('Folder')
+        html.contains('readme.txt')
+        html.contains('text/plain')
+    }
+
+    def 'buildFileBrowserTable: root empty state does not require search input to explain emptiness'() {
+        expect:
+        app.buildFileBrowserTable([], [], '', 'name', 'asc').contains('This location is empty.')
     }
 
     // ════════════════════════════════════════════════════════════════
