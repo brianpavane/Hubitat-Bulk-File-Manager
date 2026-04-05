@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.2  
+**Version:** 1.0.3  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -46,14 +46,12 @@ A full-featured file manager application for the Hubitat Elevation hub, providin
 4. Paste the following URL and click **Import**:
 
    ```
-   https://raw.githubusercontent.com/bpavane/Hubitat-Bulk-File-Manager/main/HubitatBulkFileManager.groovy
+   https://raw.githubusercontent.com/brianpavane/Hubitat-Bulk-File-Manager/main/HubitatBulkFileManager.groovy
    ```
 
 5. Click **Save** in the code editor.
 6. Navigate to **Apps → + Add User App**.
 7. Select **Hubitat Bulk File Manager** and click **Done**.
-
-> **Note:** If your GitHub username differs from `bpavane`, replace it in the URL above before importing.
 
 ### Option B — Manual paste
 
@@ -67,7 +65,7 @@ A full-featured file manager application for the Hubitat Elevation hub, providin
 If you manage apps via HPM, add this repository URL when prompted for a custom package source:
 
 ```
-https://raw.githubusercontent.com/bpavane/Hubitat-Bulk-File-Manager/main/packageManifest.json
+https://raw.githubusercontent.com/brianpavane/Hubitat-Bulk-File-Manager/main/packageManifest.json
 ```
 
 ---
@@ -201,7 +199,7 @@ Hubitat-Bulk-File-Manager/
 
 ```bash
 # Clone the repository
-git clone https://github.com/bpavane/Hubitat-Bulk-File-Manager.git
+git clone https://github.com/brianpavane/Hubitat-Bulk-File-Manager.git
 cd Hubitat-Bulk-File-Manager
 
 # Run the full test suite
@@ -248,6 +246,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.3 | 2026-04-04 | Updated README GitHub URLs to use the correct `brianpavane` username |
 | 1.0.2 | 2026-04-04 | Refactored main view into an Explorer-style browser table with folders and files shown together |
 | 1.0.1 | 2026-04-04 | Added clickable file-table header sorting for Name, Size, and Modified columns |
 | 1.0.0 | 2026-04-04 | Initial release |
