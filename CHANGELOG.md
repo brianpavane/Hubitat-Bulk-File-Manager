@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.9] — 2026-04-04
+
+### Added
+- Hubitat-hosted web file manager served from a new `/ui` app endpoint
+- Local JSON API endpoints for listing files and performing delete, copy, and move operations
+- Launch link from the standard Hubitat app page into the on-hub web UI
+
+### Changed
+- Spock test suite expanded to 154 tests, 0 failures
+- Test harness now supports endpoint rendering and JSON request bodies for web UI coverage
+
 ## [1.0.8] — 2026-04-04
 
 ### Changed
@@ -107,10 +118,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - This project is a single-file Hubitat Groovy app; there is no `package.json`.  
-  Version is tracked in the file header (`Version: 1.0.8`) and in this changelog.
+  Version is tracked in the file header (`Version: 1.0.9`) and in this changelog.
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.9]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.9
 [1.0.8]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.8
 [1.0.7]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.7
 [1.0.6]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.6

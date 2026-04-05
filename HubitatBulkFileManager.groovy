@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.8
+ *  Version: 1.0.9
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -37,6 +37,15 @@ definition(
     singleInstance: true
 )
 
+mappings {
+    path("/ui")        { action: [GET: "renderWebUi"] }
+    path("/api/files") { action: [GET: "apiFiles"] }
+    path("/api/config"){ action: [GET: "apiConfig"] }
+    path("/api/delete"){ action: [POST: "apiDelete"] }
+    path("/api/copy")  { action: [POST: "apiCopy"] }
+    path("/api/move")  { action: [POST: "apiMove"] }
+}
+
 // ════════════════════════════════════════════════════════════════
 //  PAGES
 // ════════════════════════════════════════════════════════════════
@@ -53,7 +62,17 @@ preferences {
 // ────────────────────────────────────────────────────────────────
 
 def mainPage() {
-    def version   = "1.0.8"
+    def version   = "1.0.9"
+    if (params?.sortField != null) {
+        def requestedSortField = params.sortField.toString()
+        app.updateSetting("sortField", [type: "enum", value: requestedSortField])
+        settings.sortField = requestedSortField
+    }
+    if (params?.sortDir != null) {
+        def requestedSortDir = params.sortDir.toString()
+        app.updateSetting("sortDir", [type: "enum", value: requestedSortDir])
+        settings.sortDir = requestedSortDir
+    }
     def requestedPage = params?.page != null ? safeInt(params.page, 1) : safeInt(state.currentPage, 1)
     state.currentPage = Math.max(1, requestedPage)
     def allFiles  = getFileList()
@@ -102,10 +121,41 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
                   required      : false,
                   submitOnChange: true,
                   width         : 8
+            href url: "${getHubBaseUrl()}/apps/api/${app.id ?: ''}/ui",
+                 title: "Open Web File Manager",
+                 description: "Launch the on-hub JavaScript file manager",
+                 style: "external",
+                 required: false
         }
 
-        // ── Toolbar ────────────────────────────────────────────────────
-        section("Actions") {
+        // ── Finder-style file browser ──────────────────────────────────
+        section("Files  /local/") {
+            paragraph "<small style='color:#777;'>Search filters this list. Sorting and bulk actions live here in the File Manager view.</small>"
+            href "mainPage",
+                 title      : buildSortControlTitle("Name", "name", sortField, sortDir),
+                 description: "",
+                 params     : buildSortParams("name", sortField, sortDir),
+                 width      : 2
+            href "mainPage",
+                 title      : buildSortControlTitle("Type", "mimeType", sortField, sortDir),
+                 description: "",
+                 params     : buildSortParams("mimeType", sortField, sortDir),
+                 width      : 2
+            href "mainPage",
+                 title      : buildSortControlTitle("Size", "size", sortField, sortDir),
+                 description: "",
+                 params     : buildSortParams("size", sortField, sortDir),
+                 width      : 2
+            href "mainPage",
+                 title      : buildSortControlTitle("Modified", "date", sortField, sortDir),
+                 description: "",
+                 params     : buildSortParams("date", sortField, sortDir),
+                 width      : 2
+            href "mainPage",
+                 title      : sortDir == "asc" ? "Ascending" : "Descending",
+                 description: "Current direction",
+                 params     : [sortField: sortField, sortDir: toggleSortDir(sortDir), page: 1],
+                 width      : 2
             input "btnSelectAll",   "button", title: "&#9745; Select All",  width: 2
             input "btnDeselectAll", "button", title: "&#9744; Clear",       width: 2
             if (selCount > 0) {
@@ -124,32 +174,12 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
                      params     : [op: "move"],
                      width      : 2
             }
-        }
-
-        // ── Finder-style file browser ──────────────────────────────────
-        section("Files  /local/") {
-            input "sortField", "enum",
-                  title         : "Sort By",
-                  options       : [name: "Name", mimeType: "Type", size: "Size", date: "Modified"],
-                  defaultValue  : "name",
-                  required      : false,
-                  submitOnChange: true,
-                  width         : 4
-            input "sortDir", "enum",
-                  title         : "Direction",
-                  options       : [asc: "Ascending", desc: "Descending"],
-                  defaultValue  : "asc",
-                  required      : false,
-                  submitOnChange: true,
-                  width         : 4
             input "selectedFiles", "enum",
-                  title         : "Selected Files On This Page",
+                  title         : "Files On This Page",
                   options       : buildSelectionOptions(files),
                   multiple      : true,
                   required      : false,
                   submitOnChange: true
-            paragraph "<small style='color:#777;'>Hubitat refreshes this page after sort or selection changes. " +
-                      "The table below updates to match the current page and selection state.</small>"
             paragraph buildFinderTable(files, selected, sortField, sortDir)
             paragraph buildPaginationBar(currentPage, pageCount, filteredFiles.size(), pageSize)
         }
@@ -178,7 +208,7 @@ def confirmDeletePage() {
     def toDelete  = (settings.selectedFiles ?: []) as List
     def completed = state.deleteResult != null
 
-    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.8",
+    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.9",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -226,7 +256,7 @@ def destinationPickerPage() {
     def completed = state.opResult != null
 
     dynamicPage(name: "destinationPickerPage",
-                title: "${op.capitalize()} Files  \u2022  v1.0.8",
+                title: "${op.capitalize()} Files  \u2022  v1.0.9",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -268,7 +298,7 @@ any <code>/</code> in the name is part of the filename.</small>"""
 // ────────────────────────────────────────────────────────────────
 
 def settingsPage() {
-    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.8",
+    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.9",
                 install: false, uninstall: false) {
 
         section("Hub Connection") {
@@ -346,12 +376,12 @@ def appButtonHandler(String btn) {
 // ════════════════════════════════════════════════════════════════
 
 def installed() {
-    log.info "Hubitat Bulk File Manager v1.0.8 installed"
+    log.info "Hubitat Bulk File Manager v1.0.9 installed"
     initialize()
 }
 
 def updated() {
-    log.info "Hubitat Bulk File Manager v1.0.8 updated"
+    log.info "Hubitat Bulk File Manager v1.0.9 updated"
     initialize()
 }
 
@@ -360,6 +390,70 @@ def initialize() {
     state.deleteResult = null
     state.opResult     = null
     state.pendingOp    = null
+}
+
+// ════════════════════════════════════════════════════════════════
+//  WEB UI ENDPOINTS
+// ════════════════════════════════════════════════════════════════
+
+def renderWebUi() {
+    render contentType: "text/html", data: buildWebUiHtml()
+}
+
+def apiConfig() {
+    renderJson([
+        version : "1.0.9",
+        pageSize: getPageSize(),
+        hubBase : getHubBaseUrl()
+    ])
+}
+
+def apiFiles() {
+    def files = getFileList()
+    renderJson([
+        files         : files,
+        total         : files.size(),
+        pageSize      : getPageSize(),
+        fileListStatus: state.fileListStatus ?: [:]
+    ])
+}
+
+def apiDelete() {
+    def body = getRequestBodyMap()
+    def files = normalizeRequestedFiles(body.files)
+    def result = performDelete(files)
+    if (!result.errors) {
+        app.updateSetting("selectedFiles", [type: "enum", value: []])
+    }
+    renderJson([
+        ok    : !result.errors,
+        result: result
+    ], result.errors ? 400 : 200)
+}
+
+def apiCopy() {
+    def body = getRequestBodyMap()
+    def files = normalizeRequestedFiles(body.files)
+    def dest = (body.destination ?: "").toString().trim()
+    def result = performCopy(files, dest)
+    renderJson([
+        ok    : !result.errors,
+        result: result
+    ], result.errors ? 400 : 200)
+}
+
+def apiMove() {
+    def body = getRequestBodyMap()
+    def files = normalizeRequestedFiles(body.files)
+    def dest = (body.destination ?: "").toString().trim()
+    def result = performMove(files, dest)
+    if (!result.errors) {
+        app.updateSetting("selectedFiles", [type: "enum", value: []])
+    }
+    renderJson([
+        ok    : !result.errors,
+        result: result
+    ], result.errors ? 400 : 200)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -703,15 +797,327 @@ def buildSelectionOptions(List files) {
     return options
 }
 
-def toggleSelectedFile(String filename) {
-    def name = filename?.toString()?.trim()
-    if (!name) return
-    def selected = ((settings.selectedFiles ?: []) as List).collect { it?.toString() }.findAll { it }
-    if (selected.contains(name)) selected.removeAll { it == name }
-    else selected << name
-    selected = selected.unique()
-    app.updateSetting("selectedFiles", [type: "enum", value: selected])
-    settings.selectedFiles = selected
+def buildSortControlTitle(String label, String field, String activeSortField = "name", String activeSortDir = "asc") {
+    def active = activeSortField == field
+    def indicator = active ? (activeSortDir == "asc" ? " ▲" : " ▼") : ""
+    return "${label}${indicator}"
+}
+
+def buildSortParams(String field, String activeSortField = "name", String activeSortDir = "asc") {
+    def nextDir = (activeSortField == field) ? toggleSortDir(activeSortDir) : "asc"
+    return [sortField: field, sortDir: nextDir, page: 1]
+}
+
+def toggleSortDir(String sortDir = "asc") {
+    return sortDir == "desc" ? "asc" : "desc"
+}
+
+def buildWebUiHtml() {
+    def version = "1.0.9"
+    def appId = app?.id ?: ""
+    def basePath = "/apps/api/${appId}"
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hubitat Bulk File Manager</title>
+  <style>
+    :root{--bg:#f3f4f6;--panel:#ffffff;--line:#d9dde3;--text:#17212b;--muted:#5f6b76;--accent:#2563eb;--accent-soft:#dbeafe;--danger:#c0392b;--good:#13795b;}
+    *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;background:linear-gradient(180deg,#eef4ff 0%,#f7f8fa 45%,#eef2f7 100%);color:var(--text)}
+    .shell{max-width:1280px;margin:0 auto;padding:24px}
+    .hero,.panel{background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border:1px solid rgba(217,221,227,.95);border-radius:18px;box-shadow:0 14px 40px rgba(15,23,42,.08)}
+    .hero{padding:22px 24px 18px;margin-bottom:18px}
+    .hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:var(--muted)}
+    .toolbar{display:grid;grid-template-columns:1.4fr repeat(6,minmax(0,1fr));gap:10px;align-items:end;padding:18px}
+    .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+    .field input,.field select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font-size:14px}
+    .btnrow{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 18px}.btn{border:none;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer;background:#eef2f7;color:var(--text)}
+    .btn.primary{background:var(--accent);color:#fff}.btn.danger{background:#fff0ef;color:var(--danger)} .btn:disabled{opacity:.45;cursor:not-allowed}
+    .meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 18px 18px;color:var(--muted);font-size:13px}
+    .status{margin:0 18px 18px;padding:12px 14px;border-radius:14px;font-size:14px;display:none}.status.show{display:block}.status.ok{background:#ecfdf3;color:var(--good);border:1px solid #b7ebcf}.status.err{background:#fff1f2;color:var(--danger);border:1px solid #f5c2c7}
+    .tablewrap{overflow:auto;padding:0 18px 18px}.fdr{width:100%;border-collapse:collapse;min-width:820px}.fdr thead tr{background:#f7f8fa}.fdr th,.fdr td{padding:10px 12px;border-bottom:1px solid #edf0f4;text-align:left}
+    .fdr th button{border:none;background:none;padding:0;font:inherit;font-weight:800;color:var(--text);cursor:pointer}.fdr th button.active{color:var(--accent)}
+    .fdr tr:hover td{background:#f8fbff}.fdr .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#475569}.fdr .muted{color:#64748b}.fdr .check{width:36px}.empty{padding:32px;text-align:center;color:#94a3b8}
+    .pager{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 18px 20px;color:var(--muted);font-size:13px}.pager .nav{display:flex;gap:8px}
+    @media (max-width: 980px){.toolbar{grid-template-columns:1fr 1fr}.field.search{grid-column:1/-1}}
+    @media (max-width: 640px){.shell{padding:14px}.toolbar{grid-template-columns:1fr}.field.search{grid-column:auto}.meta,.pager{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <h1>Hubitat Bulk File Manager</h1>
+      <p>Web UI on Hubitat itself. Search filters instantly, sorting is client-side, and file actions call the app API only when needed. v${version}</p>
+    </section>
+    <section class="panel">
+      <div class="toolbar">
+        <div class="field search">
+          <label for="search">Search</label>
+          <input id="search" type="search" placeholder="Filter files by name">
+        </div>
+        <div class="field">
+          <label for="pageSize">Rows</label>
+          <select id="pageSize">
+            <option>50</option><option>100</option><option>200</option><option>500</option><option>1000</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Sort</label>
+          <input value="Use table headers" readonly>
+        </div>
+        <div class="field">
+          <label>Selected</label>
+          <input id="selectedCount" value="0 files" readonly>
+        </div>
+        <div class="field">
+          <label>Total Size</label>
+          <input id="selectedSize" value="0 B" readonly>
+        </div>
+        <div class="field">
+          <label>Files</label>
+          <input id="totalCount" value="0 files" readonly>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <input id="loadStatus" value="Loading..." readonly>
+        </div>
+      </div>
+      <div class="btnrow">
+        <button class="btn" id="selectPage">Select Page</button>
+        <button class="btn" id="clearSelection">Clear</button>
+        <button class="btn" id="refreshBtn">Refresh</button>
+        <button class="btn primary" id="copyBtn" disabled>Copy</button>
+        <button class="btn primary" id="moveBtn" disabled>Move</button>
+        <button class="btn danger" id="deleteBtn" disabled>Delete</button>
+      </div>
+      <div class="meta">
+        <span id="pageMeta">Loading files...</span>
+        <span>All controls below live inside this file manager view.</span>
+      </div>
+      <div id="status" class="status"></div>
+      <div class="tablewrap">
+        <table class="fdr">
+          <thead>
+            <tr>
+              <th class="check"><input id="checkAll" type="checkbox" aria-label="Select visible files"></th>
+              <th></th>
+              <th><button data-sort="name">Name</button></th>
+              <th><button data-sort="mimeType">Type</button></th>
+              <th class="num"><button data-sort="size">Size</button></th>
+              <th><button data-sort="date">Modified</button></th>
+            </tr>
+          </thead>
+          <tbody id="fileRows"><tr><td colspan="6" class="empty">Loading files...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <div class="nav">
+          <button class="btn" id="prevBtn">Previous</button>
+          <button class="btn" id="nextBtn">Next</button>
+        </div>
+        <div id="pagerMeta">Page 1</div>
+      </div>
+    </section>
+  </div>
+  <script>
+    const apiBase = ${groovy.json.JsonOutput.toJson(basePath)};
+    const state = { files: [], filtered: [], selected: new Set(), sortField: 'name', sortDir: 'asc', search: '', page: 1, pageSize: 200 };
+    const el = {
+      search: document.getElementById('search'),
+      pageSize: document.getElementById('pageSize'),
+      selectedCount: document.getElementById('selectedCount'),
+      selectedSize: document.getElementById('selectedSize'),
+      totalCount: document.getElementById('totalCount'),
+      loadStatus: document.getElementById('loadStatus'),
+      pageMeta: document.getElementById('pageMeta'),
+      pagerMeta: document.getElementById('pagerMeta'),
+      fileRows: document.getElementById('fileRows'),
+      status: document.getElementById('status'),
+      checkAll: document.getElementById('checkAll'),
+      prevBtn: document.getElementById('prevBtn'),
+      nextBtn: document.getElementById('nextBtn'),
+      selectPage: document.getElementById('selectPage'),
+      clearSelection: document.getElementById('clearSelection'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      copyBtn: document.getElementById('copyBtn'),
+      moveBtn: document.getElementById('moveBtn'),
+      deleteBtn: document.getElementById('deleteBtn')
+    };
+    const sortButtons = Array.from(document.querySelectorAll('[data-sort]'));
+    const iconFor = (mime) => {
+      if (!mime) return '📄';
+      if (mime.startsWith('image/')) return '🖼️';
+      if (mime.startsWith('text/')) return '📝';
+      if (mime.startsWith('audio/')) return '🎵';
+      if (mime.startsWith('video/')) return '🎬';
+      if (mime.includes('pdf')) return '📕';
+      if (mime.includes('zip') || mime.includes('tar') || mime.includes('gzip') || mime.includes('archive')) return '📦';
+      if (mime.includes('json') || mime.includes('xml') || mime.includes('javascript') || mime.includes('groovy')) return '⚙️';
+      return '📄';
+    };
+    const formatSize = (bytes) => {
+      const n = Number(bytes || 0);
+      if (n < 1024) return n + ' B';
+      if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+      if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+      return (n / 1073741824).toFixed(2) + ' GB';
+    };
+    const formatDate = (value) => {
+      if (!value) return '—';
+      const raw = String(value);
+      const digitsOnly = raw.length > 0 && raw.split('').every(ch => ch >= '0' && ch <= '9');
+      if (digitsOnly) {
+        let epoch = Number(value);
+        if (raw.length <= 10) epoch *= 1000;
+        return new Date(epoch).toLocaleString();
+      }
+      const parsed = new Date(raw.replace(' ', 'T'));
+      return Number.isNaN(parsed.getTime()) ? raw.slice(0, 16) : parsed.toLocaleString();
+    };
+    const compare = (a, b) => {
+      const field = state.sortField;
+      const dir = state.sortDir === 'desc' ? -1 : 1;
+      const av = field === 'size' ? Number(a[field] || 0) : String(a[field] || '').toLowerCase();
+      const bv = field === 'size' ? Number(b[field] || 0) : String(b[field] || '').toLowerCase();
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+    };
+    const currentPageFiles = () => {
+      const start = (state.page - 1) * state.pageSize;
+      return state.filtered.slice(start, start + state.pageSize);
+    };
+    const selectedBytes = () => state.files.reduce((sum, file) => state.selected.has(file.name) ? sum + Number(file.size || 0) : sum, 0);
+    const flash = (message, ok = true) => {
+      el.status.textContent = message;
+      el.status.className = 'status show ' + (ok ? 'ok' : 'err');
+    };
+    const syncSummary = () => {
+      const totalPages = Math.max(1, Math.ceil(state.filtered.length / state.pageSize));
+      const pageFiles = currentPageFiles();
+      const start = pageFiles.length ? ((state.page - 1) * state.pageSize) + 1 : 0;
+      const end = pageFiles.length ? start + pageFiles.length - 1 : 0;
+      el.selectedCount.value = state.selected.size + ' file' + (state.selected.size === 1 ? '' : 's');
+      el.selectedSize.value = formatSize(selectedBytes());
+      el.totalCount.value = state.files.length + ' files';
+      el.pageMeta.textContent = state.filtered.length + ' matching file(s). Showing ' + start + '-' + (end || 0) + '.';
+      el.pagerMeta.textContent = 'Page ' + state.page + ' of ' + totalPages;
+      el.prevBtn.disabled = state.page <= 1;
+      el.nextBtn.disabled = state.page >= totalPages;
+      const active = state.selected.size === 0;
+      el.copyBtn.disabled = active;
+      el.moveBtn.disabled = active;
+      el.deleteBtn.disabled = active;
+      el.checkAll.checked = pageFiles.length > 0 && pageFiles.every(file => state.selected.has(file.name));
+      sortButtons.forEach(btn => {
+        const activeSort = btn.dataset.sort === state.sortField;
+        btn.classList.toggle('active', activeSort);
+        btn.textContent = btn.dataset.sort === 'mimeType' ? 'Type' : btn.dataset.sort === 'date' ? 'Modified' : btn.dataset.sort.charAt(0).toUpperCase() + btn.dataset.sort.slice(1);
+        if (activeSort) btn.textContent += state.sortDir === 'asc' ? ' ▲' : ' ▼';
+      });
+    };
+    const renderRows = () => {
+      const pageFiles = currentPageFiles();
+      if (pageFiles.length === 0) {
+        el.fileRows.innerHTML = '<tr><td colspan="6" class="empty">No files match the current filter.</td></tr>';
+        syncSummary();
+        return;
+      }
+      el.fileRows.innerHTML = pageFiles.map(file => {
+        const checked = state.selected.has(file.name) ? 'checked' : '';
+        return '<tr>' +
+          '<td class="check"><input type="checkbox" data-file="' + encodeURIComponent(file.name) + '" ' + checked + '></td>' +
+          '<td>' + iconFor(file.mimeType) + '</td>' +
+          '<td>' + escapeHtml(file.name) + '</td>' +
+          '<td class="muted">' + escapeHtml(file.mimeType || '—') + '</td>' +
+          '<td class="num">' + formatSize(file.size || 0) + '</td>' +
+          '<td class="muted">' + formatDate(file.date || '') + '</td>' +
+        '</tr>';
+      }).join('');
+      el.fileRows.querySelectorAll('input[type="checkbox"][data-file]').forEach(box => {
+        box.addEventListener('change', () => {
+          const name = decodeURIComponent(box.dataset.file);
+          if (box.checked) state.selected.add(name); else state.selected.delete(name);
+          syncSummary();
+        });
+      });
+      syncSummary();
+    };
+    const applyView = () => {
+      const needle = state.search.trim().toLowerCase();
+      state.filtered = state.files
+        .filter(file => !needle || String(file.name || '').toLowerCase().includes(needle))
+        .sort(compare);
+      const totalPages = Math.max(1, Math.ceil(state.filtered.length / state.pageSize));
+      state.page = Math.min(Math.max(1, state.page), totalPages);
+      renderRows();
+    };
+    const callApi = async (path, body) => {
+      const response = await fetch(apiBase + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data?.result?.message || 'Request failed');
+      flash(data.result.message, true);
+      return data;
+    };
+    const refreshFiles = async (showBanner = false) => {
+      const response = await fetch(apiBase + '/api/files');
+      const data = await response.json();
+      state.files = Array.isArray(data.files) ? data.files : [];
+      state.selected = new Set([...state.selected].filter(name => state.files.some(file => file.name === name)));
+      el.loadStatus.value = data.fileListStatus?.message || ('Loaded ' + state.files.length + ' files');
+      if (data.pageSize) state.pageSize = Number(data.pageSize) || state.pageSize;
+      el.pageSize.value = String(state.pageSize);
+      applyView();
+      if (showBanner) flash('Refreshed ' + state.files.length + ' file(s).', true);
+    };
+    const escapeHtml = (text) => String(text ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    el.search.addEventListener('input', () => { state.search = el.search.value; state.page = 1; applyView(); });
+    el.pageSize.addEventListener('change', () => { state.pageSize = Number(el.pageSize.value) || 200; state.page = 1; applyView(); });
+    el.prevBtn.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; renderRows(); } });
+    el.nextBtn.addEventListener('click', () => { const totalPages = Math.max(1, Math.ceil(state.filtered.length / state.pageSize)); if (state.page < totalPages) { state.page += 1; renderRows(); } });
+    el.checkAll.addEventListener('change', () => { currentPageFiles().forEach(file => el.checkAll.checked ? state.selected.add(file.name) : state.selected.delete(file.name)); renderRows(); });
+    el.selectPage.addEventListener('click', () => { currentPageFiles().forEach(file => state.selected.add(file.name)); renderRows(); });
+    el.clearSelection.addEventListener('click', () => { state.selected.clear(); renderRows(); });
+    el.refreshBtn.addEventListener('click', () => refreshFiles(true).catch(err => flash(err.message, false)));
+    sortButtons.forEach(btn => btn.addEventListener('click', () => {
+      const field = btn.dataset.sort;
+      if (state.sortField === field) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortField = field; state.sortDir = 'asc'; }
+      state.page = 1;
+      applyView();
+    }));
+    el.copyBtn.addEventListener('click', async () => {
+      const destination = prompt('Copy selected files to destination path or prefix:');
+      if (destination === null) return;
+      try { await callApi('/api/copy', { files: [...state.selected], destination }); } catch (err) { flash(err.message, false); }
+    });
+    el.moveBtn.addEventListener('click', async () => {
+      const destination = prompt('Move selected files to destination path or prefix:');
+      if (destination === null) return;
+      try {
+        await callApi('/api/move', { files: [...state.selected], destination });
+        state.selected.clear();
+        await refreshFiles();
+      } catch (err) { flash(err.message, false); }
+    });
+    el.deleteBtn.addEventListener('click', async () => {
+      if (!confirm('Delete ' + state.selected.size + ' selected file(s)? This cannot be undone.')) return;
+      try {
+        await callApi('/api/delete', { files: [...state.selected] });
+        state.selected.clear();
+        await refreshFiles();
+      } catch (err) { flash(err.message, false); }
+    });
+    refreshFiles().catch(err => {
+      el.loadStatus.value = 'Failed to load files';
+      flash(err.message || 'Unable to load files.', false);
+    });
+  </script>
+</body>
+</html>"""
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -816,4 +1222,30 @@ def makeAuthHeaders() {
         headers["Authorization"] = "Bearer ${settings.hubToken}"
     }
     return headers
+}
+
+def normalizeRequestedFiles(def rawFiles) {
+    if (rawFiles instanceof List) {
+        return rawFiles.collect { it?.toString()?.trim() }.findAll { it }
+    }
+    if (rawFiles instanceof String) {
+        return rawFiles.split(",").collect { it?.trim() }.findAll { it }
+    }
+    return []
+}
+
+def getRequestBodyMap() {
+    def json = request?.JSON
+    if (json instanceof Map) return json
+    if (json instanceof String && json.trim()) {
+        try {
+            return new groovy.json.JsonSlurper().parseText(json) as Map
+        } catch (ignored) { }
+    }
+    return params instanceof Map ? params : [:]
+}
+
+def renderJson(Map payload, int status = 200) {
+    render contentType: "application/json", status: status,
+           data: groovy.json.JsonOutput.toJson(payload)
 }

@@ -644,6 +644,90 @@ class HubitatBulkFileManagerSpec extends Specification {
         opts['big.zip'].contains('2.0 MB')
     }
 
+    def 'buildSortControlTitle: shows active ascending indicator'() {
+        expect:
+        app.buildSortControlTitle('Name', 'name', 'name', 'asc') == 'Name ▲'
+    }
+
+    def 'buildSortControlTitle: inactive field has no indicator'() {
+        expect:
+        app.buildSortControlTitle('Size', 'size', 'name', 'asc') == 'Size'
+    }
+
+    def 'buildSortParams: active field toggles direction and resets page'() {
+        expect:
+        app.buildSortParams('name', 'name', 'asc') == [sortField: 'name', sortDir: 'desc', page: 1]
+    }
+
+    def 'buildSortParams: inactive field starts ascending and resets page'() {
+        expect:
+        app.buildSortParams('date', 'name', 'desc') == [sortField: 'date', sortDir: 'asc', page: 1]
+    }
+
+    def 'toggleSortDir: flips both directions'() {
+        expect:
+        app.toggleSortDir('asc') == 'desc'
+        app.toggleSortDir('desc') == 'asc'
+    }
+
+    def 'renderWebUi: returns HTML shell with web file manager markers'() {
+        when:
+        app.renderWebUi()
+
+        then:
+        harness.rendered.contentType == 'text/html'
+        harness.rendered.data.contains('Web UI on Hubitat itself')
+        harness.rendered.data.contains('const apiBase = "/apps/api/12345";')
+        harness.rendered.data.contains('Hubitat Bulk File Manager')
+    }
+
+    def 'apiFiles: renders file list JSON'() {
+        given:
+        harness.httpGetResponses['http://192.168.1.100:8080/hub/fileManager/json'] = [
+            status: 200,
+            data  : [[name: 'alpha.txt', size: 12, date: '2026-01-01 00:00:00']]
+        ]
+
+        when:
+        app.apiFiles()
+        def payload = new groovy.json.JsonSlurper().parseText(harness.rendered.data)
+
+        then:
+        harness.rendered.contentType == 'application/json'
+        payload.total == 1
+        payload.files[0].name == 'alpha.txt'
+    }
+
+    def 'apiDelete: deletes requested files from JSON body and returns success payload'() {
+        given:
+        harness.requestJson = [files: ['alpha.txt']]
+        app = harness.loadApp()
+
+        when:
+        app.apiDelete()
+        def payload = new groovy.json.JsonSlurper().parseText(harness.rendered.data)
+
+        then:
+        harness.deletedFiles == ['alpha.txt']
+        payload.ok
+        payload.result.message.contains('Deleted 1')
+    }
+
+    def 'apiCopy: copies requested files from JSON body'() {
+        given:
+        harness.downloadResponses['alpha.txt'] = [1, 2, 3] as byte[]
+        harness.requestJson = [files: ['alpha.txt'], destination: 'backup']
+        app = harness.loadApp()
+
+        when:
+        app.apiCopy()
+        def payload = new groovy.json.JsonSlurper().parseText(harness.rendered.data)
+
+        then:
+        payload.ok
+        harness.uploadedFiles[0].name == 'backup/alpha.txt'
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  10. getFileList
     // ════════════════════════════════════════════════════════════════

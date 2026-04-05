@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.8  
+**Version:** 1.0.9  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -20,6 +20,7 @@ A full-featured file manager application for the Hubitat Elevation hub, providin
 | **Inline selection** | Select files directly from the file viewer with per-row checkbox-style toggles |
 | **Bulk selection** | Select All / Clear All toolbar buttons |
 | **Pagination** | Browse large libraries with previous / next paging controls |
+| **On-hub web UI** | Launch a JavaScript file manager served directly by the Hubitat app for instant filter, sort, and selection interactions |
 | **Delete** | Mandatory confirmation page with full file list before any deletion |
 | **Copy** | Type a destination path or prefix; copies with original basename preserved |
 | **Move** | Safe-move: sources are only deleted after all copies succeed |
@@ -87,6 +88,12 @@ Open the app in **Apps → Hubitat Bulk File Manager**, then tap **⚙ Settings*
 ### Searching
 
 Type in the **Search** box and the file list filters in real time. Search matches anywhere in the filename (case-insensitive) across all hub files.
+
+### Web file manager
+
+Use **Open Web File Manager** from the app page to launch the on-hub browser UI. It is served directly by the Hubitat app and uses local JSON endpoints for list, delete, copy, and move operations.
+
+The web view keeps search, sort, selection, and pagination inside one file-manager experience, without relying on Hubitat `dynamicPage` redraws for every interaction.
 
 ### Selecting files
 
@@ -221,7 +228,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 | Move operation | `performMove` | 3 |
 | Button handlers | `appButtonHandler` | 7 |
 | Hub URL/auth | `getHubBaseUrl`, `makeAuthHeaders` | 6 |
-| **Total** | | **148 tests, 0 failures** |
+| **Total** | | **154 tests, 0 failures** |
 
 ---
 
@@ -229,6 +236,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.9 | 2026-04-04 | Added a Hubitat-hosted JavaScript web file manager with local API endpoints for file operations |
 | 1.0.8 | 2026-04-04 | Replaced non-working inline HTML sort and selection links with Hubitat-native file-manager controls |
 | 1.0.7 | 2026-04-04 | Formatted numeric modified timestamps as dates, added previous/next paging, and kept sorting controls in the file manager view |
 | 1.0.6 | 2026-04-04 | Added inline file selection checkboxes and clickable file-viewer header sorting |

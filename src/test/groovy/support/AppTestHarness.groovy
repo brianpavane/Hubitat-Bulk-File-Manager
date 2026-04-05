@@ -23,8 +23,10 @@ class AppTestHarness {
     Map  state    = [:]
     Map  settings = [:]
     Map  params   = [:]
+    def  requestJson = null
 
     List capturedLog = []
+    Map  rendered = [:]
 
     // ── Captured side-effects ────────────────────────────────────────────────
     List uploadedFiles = []   // [name: String, size: int]
@@ -95,14 +97,21 @@ class AppTestHarness {
 
         // App object — updateSetting writes into the shared settingsMap
         binding.app = [
+            id: 12345,
             updateSetting: { String name, Map valueMap ->
                 settingsMap[name] = valueMap.value
             }
         ]
+        binding.request = [JSON: this.requestJson]
 
         // ── Hubitat DSL stubs (no-ops so the script parses without error) ────
         binding.definition  = { Map m -> }
+        binding.mappings    = { Closure c -> }
         binding.preferences = { Closure c -> /* intentionally empty — do not execute */ }
+        binding.render      = { Map m ->
+            harness.rendered = m
+            return m.data ?: m.text
+        }
 
         // ── Hubitat file sandbox methods ─────────────────────────────────────
         binding.uploadHubFile = { String name, byte[] data ->
