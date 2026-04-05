@@ -1,6 +1,6 @@
 # Hubitat Bulk File Manager
 
-**Version:** 1.0.6  
+**Version:** 1.0.7  
 **Author:** Brian Pavane  
 **Namespace:** `bpavane`  
 **Category:** Utility  
@@ -16,9 +16,10 @@ A full-featured file manager application for the Hubitat Elevation hub, providin
 | **Finder-style browser** | Flat file listing in a macOS Finder-inspired table with icon, name, type, size, and date |
 | **Zero-config install** | Works immediately after adding — no settings required |
 | **Search / filter** | Real-time case-insensitive search across all files |
-| **Sorting** | Sort by name, size, or date — ascending or descending |
-| **Individual selection** | Select single files via the multi-select input |
+| **Sorting** | Sort directly from the file-manager header bar by name, type, size, or modified date |
+| **Inline selection** | Select files directly from the file viewer with per-row checkbox-style toggles |
 | **Bulk selection** | Select All / Clear All toolbar buttons |
+| **Pagination** | Browse large libraries with previous / next paging controls |
 | **Delete** | Mandatory confirmation page with full file list before any deletion |
 | **Copy** | Type a destination path or prefix; copies with original basename preserved |
 | **Move** | Safe-move: sources are only deleted after all copies succeed |
@@ -77,7 +78,7 @@ Open the app in **Apps → Hubitat Bulk File Manager**, then tap **⚙ Settings*
 |---|---|---|
 | **Hub IP Address** | Auto-detected | Override if the hub cannot detect its own IP |
 | **Hub Security Token** | _(blank)_ | Bearer token for hubs with login enabled (find it in **Settings → Hub Login Security → Access Token**) |
-| **Max files per directory** | `200` | Caps the number of files rendered per page (range: 10–2000) |
+| **Files per page** | `200` | Caps the number of files rendered per page (range: 10–2000) |
 
 ---
 
@@ -89,11 +90,17 @@ Type in the **Search** box and the file list filters in real time. Search matche
 
 ### Selecting files
 
-Use the **Select Items** dropdown to choose individual files.  
+Use the inline selection control beside each file to toggle it on or off.  
 Use **☑ Select All** to select every file visible in the current search/sort view.  
 Use **☐ Clear** to deselect everything.  
 
 The **status bar** at the bottom always shows how many files are selected and their total size.
+
+### Sorting and paging
+
+Click the **Name**, **Type**, **Size**, or **Modified** headers in the file manager to sort the visible list. Click the active header again to flip ascending or descending order.
+
+When the library is larger than the current page size, use the **Previous** and **Next** links under the table to move through all files.
 
 ### Deleting files
 
@@ -199,11 +206,12 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 | Group | Methods tested | Test cases |
 |---|---|---|
 | Size formatting | `formatSize` | 11 |
-| Date formatting | `formatDate` | 7 |
+| Date formatting | `formatDate` | 9 |
 | MIME detection | `getMimeType` | 25 |
 | File icons | `getFileIcon` | 17 |
 | HTML escaping | `escapeHtml` | 7 |
 | File filtering/sorting | `filterFiles` | 10 |
+| Pagination | `paginateFiles`, `buildPaginationBar` | 3 |
 | Selection size | `computeSelectedSize` | 5 |
 | Finder table | `buildFinderTable` | 11 |
 | Selection options | `buildSelectionOptions` | 4 |
@@ -213,7 +221,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 | Move operation | `performMove` | 3 |
 | Button handlers | `appButtonHandler` | 7 |
 | Hub URL/auth | `getHubBaseUrl`, `makeAuthHeaders` | 6 |
-| **Total** | | **130 tests, 0 failures** |
+| **Total** | | **148 tests, 0 failures** |
 
 ---
 
@@ -221,6 +229,7 @@ The test suite (`HubitatBulkFileManagerSpec.groovy`) covers:
 
 | Version | Date | Notes |
 |---|---|---|
+| 1.0.7 | 2026-04-04 | Formatted numeric modified timestamps as dates, added previous/next paging, and kept sorting controls in the file manager view |
 | 1.0.6 | 2026-04-04 | Added inline file selection checkboxes and clickable file-viewer header sorting |
 | 1.0.5 | 2026-04-04 | Added dual-port file-manager probing and clearer file-list diagnostics |
 | 1.0.4 | 2026-04-04 | Finder-style flat listing, version display in all pages, zero-config install, removed virtual-directory code |

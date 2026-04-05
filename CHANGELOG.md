@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.7] — 2026-04-04
+
+### Changed
+- Numeric `Modified` timestamps from Hubitat are now formatted into readable dates in the file viewer
+- Large file libraries now page through the full result set with previous and next navigation
+- Top-level search controls were simplified so sorting lives in the file-manager header row instead of the search form
+- Spock test suite updated to 148 tests, 0 failures
+
 ## [1.0.6] — 2026-04-04
 
 ### Changed
@@ -91,10 +99,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Notes
 - This project is a single-file Hubitat Groovy app; there is no `package.json`.  
-  Version is tracked in the file header (`Version: 1.0.6`) and in this changelog.
+  Version is tracked in the file header (`Version: 1.0.7`) and in this changelog.
 - The `/shannon` security-scan skill is not yet registered in this workspace;  
   a manual code review was performed instead (see Security section above).
 
+[1.0.7]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.7
 [1.0.6]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.6
 [1.0.5]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.5
 [1.0.4]: https://github.com/brianpavane/Hubitat-Bulk-File-Manager/releases/tag/v1.0.4

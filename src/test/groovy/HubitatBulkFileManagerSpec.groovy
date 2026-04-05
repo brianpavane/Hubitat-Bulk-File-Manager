@@ -81,6 +81,22 @@ class HubitatBulkFileManagerSpec extends Specification {
         app.formatDate('bad') == 'bad'
     }
 
+    def 'formatDate: parses millisecond epoch timestamp'() {
+        given:
+        def sdf = new java.text.SimpleDateFormat('yyyy-MM-dd HH:mm')
+
+        expect:
+        app.formatDate('1767225600000') == sdf.format(new Date(1767225600000L))
+    }
+
+    def 'formatDate: parses second epoch timestamp'() {
+        given:
+        def sdf = new java.text.SimpleDateFormat('yyyy-MM-dd HH:mm')
+
+        expect:
+        app.formatDate('1767225600') == sdf.format(new Date(1767225600L * 1000L))
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  3. getMimeType
     // ════════════════════════════════════════════════════════════════
@@ -314,36 +330,47 @@ class HubitatBulkFileManagerSpec extends Specification {
         result*.name == ['newest.txt', 'mid.txt', 'old.txt']
     }
 
-    def 'filterFiles: respects maxFiles setting'() {
-        given:
-        def files = (1..20).collect { AppTestHarness.fileEntry("file${it}.txt") }
-        harness.settings['maxFiles'] = 15   // within valid range [10..2000]
-
-        when:
-        def result = app.filterFiles(files, '', 'name', 'asc')
-
-        then:
-        result.size() == 15
-    }
-
-    def 'filterFiles: clamps maxFiles minimum to 10'() {
-        given:
-        def files = (1..20).collect { AppTestHarness.fileEntry("file${it}.txt") }
-        harness.settings['maxFiles'] = 2    // below minimum — clamped to 10
-
-        when:
-        def result = app.filterFiles(files, '', 'name', 'asc')
-
-        then:
-        result.size() == 10
-    }
-
     def 'filterFiles: empty list returns empty'() {
         given:
         harness.settings['maxFiles'] = 200
 
         expect:
         app.filterFiles([], '', 'name', 'asc') == []
+    }
+
+    def 'paginateFiles: returns first page using maxFiles page size'() {
+        given:
+        def files = (1..20).collect { AppTestHarness.fileEntry("file${it}.txt") }
+
+        when:
+        def page = app.paginateFiles(files, 1, 15)
+
+        then:
+        page.size() == 15
+        page.first().name == 'file1.txt'
+    }
+
+    def 'paginateFiles: returns second page'() {
+        given:
+        def files = (1..20).collect { AppTestHarness.fileEntry("file${it}.txt") }
+
+        when:
+        def page = app.paginateFiles(files, 2, 15)
+
+        then:
+        page.size() == 5
+        page.first().name == 'file16.txt'
+    }
+
+    def 'buildPaginationBar: renders next and previous links when multiple pages exist'() {
+        when:
+        def html = app.buildPaginationBar(2, 3, 587, 200)
+
+        then:
+        html.contains('?page=1')
+        html.contains('?page=3')
+        html.contains('Page 2 of 3')
+        html.contains('Showing 201-400 of 587')
     }
 
     // ════════════════════════════════════════════════════════════════

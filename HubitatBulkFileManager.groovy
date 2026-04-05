@@ -1,6 +1,6 @@
 /**
  *  Hubitat Bulk File Manager
- *  Version: 1.0.6
+ *  Version: 1.0.7
  *  Author:  Brian Pavane
  *
  *  Features:
@@ -53,7 +53,7 @@ preferences {
 // ────────────────────────────────────────────────────────────────
 
 def mainPage() {
-    def version   = "1.0.6"
+    def version   = "1.0.7"
     if (params?.sortField != null) {
         def requestedSortField = params.sortField.toString()
         app.updateSetting("sortField", [type: "enum", value: requestedSortField])
@@ -67,11 +67,18 @@ def mainPage() {
     if (params?.toggleFile != null) {
         toggleSelectedFile(params.toggleFile.toString())
     }
+    def requestedPage = params?.page != null ? safeInt(params.page, 1) : safeInt(state.currentPage, 1)
+    state.currentPage = Math.max(1, requestedPage)
     def allFiles  = getFileList()
     def sortField = (settings.sortField  ?: "name").toString()
     def sortDir   = (settings.sortDir    ?: "asc").toString()
     def search    = (settings.searchText ?: "").toString()
-    def files     = filterFiles(allFiles, search, sortField, sortDir)
+    def filteredFiles = filterFiles(allFiles, search, sortField, sortDir)
+    def pageSize  = getPageSize()
+    def pageCount = Math.max(1, (int) Math.ceil((filteredFiles.size() ?: 0) / (pageSize as double)))
+    def currentPage = Math.min(state.currentPage as int, pageCount)
+    state.currentPage = currentPage
+    def files     = paginateFiles(filteredFiles, currentPage, pageSize)
     def selected  = (settings.selectedFiles ?: []) as List
     def selCount  = selected.size()
     def selSize   = computeSelectedSize(allFiles, selected)
@@ -101,27 +108,13 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
             }
         }
 
-        // ── Search + Sort ──────────────────────────────────────────────
+        // ── Search ─────────────────────────────────────────────────────
         section {
             input "searchText", "text",
                   title         : "&#128269; Search files\u2026",
                   required      : false,
                   submitOnChange: true,
-                  width         : 6
-            input "sortField", "enum",
-                  title        : "Sort by",
-                  options      : ["name": "Name", "mimeType": "Type", "size": "Size", "date": "Date Modified"],
-                  defaultValue : "name",
-                  required     : false,
-                  submitOnChange: true,
-                  width        : 3
-            input "sortDir", "enum",
-                  title        : "Direction",
-                  options      : ["asc": "Ascending", "desc": "Descending"],
-                  defaultValue : "asc",
-                  required     : false,
-                  submitOnChange: true,
-                  width        : 3
+                  width         : 8
         }
 
         // ── Toolbar ────────────────────────────────────────────────────
@@ -149,13 +142,14 @@ background:#fafafa;margin-bottom:4px;border-radius:3px;font-size:12px;color:#555
         // ── Finder-style file browser ──────────────────────────────────
         section("Files  /local/") {
             paragraph buildFinderTable(files, selected, sortField, sortDir)
+            paragraph buildPaginationBar(currentPage, pageCount, filteredFiles.size(), pageSize)
         }
 
         // ── Status bar ─────────────────────────────────────────────────
         section {
             paragraph "<small style='color:#777;'>" +
                       "${allFiles.size()} file(s) total &nbsp;&#183;&nbsp; " +
-                      "${files.size()} shown &nbsp;&#183;&nbsp; " +
+                      "${files.size()} shown on page ${currentPage} of ${pageCount} &nbsp;&#183;&nbsp; " +
                       "Total: ${formatSize(totalSize)} &nbsp;&#183;&nbsp; " +
                       "${selCount} selected (${formatSize(selSize)}) &nbsp;&#183;&nbsp; " +
                       "v${version}" +
@@ -175,7 +169,7 @@ def confirmDeletePage() {
     def toDelete  = (settings.selectedFiles ?: []) as List
     def completed = state.deleteResult != null
 
-    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.6",
+    dynamicPage(name: "confirmDeletePage", title: "Confirm Delete  \u2022  v1.0.7",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -223,7 +217,7 @@ def destinationPickerPage() {
     def completed = state.opResult != null
 
     dynamicPage(name: "destinationPickerPage",
-                title: "${op.capitalize()} Files  \u2022  v1.0.6",
+                title: "${op.capitalize()} Files  \u2022  v1.0.7",
                 install: false, uninstall: false) {
 
         if (completed) {
@@ -265,7 +259,7 @@ any <code>/</code> in the name is part of the filename.</small>"""
 // ────────────────────────────────────────────────────────────────
 
 def settingsPage() {
-    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.6",
+    dynamicPage(name: "settingsPage", title: "Settings  \u2022  v1.0.7",
                 install: false, uninstall: false) {
 
         section("Hub Connection") {
@@ -277,7 +271,7 @@ def settingsPage() {
         }
         section("Display") {
             input "maxFiles", "number",
-                  title       : "Max files shown",
+                  title       : "Files per page",
                   defaultValue: 200,
                   range       : "10..2000",
                   required    : false
@@ -298,10 +292,12 @@ def appButtonHandler(String btn) {
 
         case "btnSelectAll":
             def allFiles = getFileList()
-            def files    = filterFiles(allFiles,
+            def files    = paginateFiles(filterFiles(allFiles,
                                (settings.searchText ?: "").toString(),
                                (settings.sortField  ?: "name").toString(),
-                               (settings.sortDir    ?: "asc").toString())
+                               (settings.sortDir    ?: "asc").toString()),
+                               safeInt(state.currentPage, 1),
+                               getPageSize())
             def allKeys  = buildSelectionOptions(files).keySet().toList()
             app.updateSetting("selectedFiles", [type: "enum", value: allKeys])
             break
@@ -341,12 +337,12 @@ def appButtonHandler(String btn) {
 // ════════════════════════════════════════════════════════════════
 
 def installed() {
-    log.info "Hubitat Bulk File Manager v1.0.6 installed"
+    log.info "Hubitat Bulk File Manager v1.0.7 installed"
     initialize()
 }
 
 def updated() {
-    log.info "Hubitat Bulk File Manager v1.0.6 updated"
+    log.info "Hubitat Bulk File Manager v1.0.7 updated"
     initialize()
 }
 
@@ -563,8 +559,6 @@ def downloadFileBytes(String filename) {
  * Hubitat's file store is flat — no path-based filtering is needed.
  */
 def filterFiles(List allFiles, String search, String sortField, String sortDir) {
-    def maxRaw   = (settings.maxFiles ?: 200) as int
-    def max      = Math.max(10, Math.min(2000, maxRaw))
     def filtered = allFiles.findAll { f ->
         if (!search?.trim()) return true
         (f.name ?: "").toLowerCase().contains(search.toLowerCase())
@@ -579,7 +573,15 @@ def filterFiles(List allFiles, String search, String sortField, String sortDir) 
         }
         sortDir == "desc" ? bv <=> av : av <=> bv
     }
-    return filtered.take(max)
+    return filtered
+}
+
+def paginateFiles(List files, int currentPage, int pageSize) {
+    def safePage = Math.max(1, currentPage ?: 1)
+    def safeSize = Math.max(10, pageSize ?: 200)
+    def offset = (safePage - 1) * safeSize
+    if (offset >= files.size()) return []
+    return files.drop(offset).take(safeSize)
 }
 
 /**
@@ -662,7 +664,7 @@ def buildSortHeaderLink(String label, String field,
                         String activeSortField = "name", String activeSortDir = "asc") {
     def nextDir   = (activeSortField == field && activeSortDir == "asc") ? "desc" : "asc"
     def indicator = (activeSortField == field) ? (activeSortDir == "asc" ? " &#9650;" : " &#9660;") : ""
-    return "<a href='?sortField=${urlEncode(field)}&sortDir=${urlEncode(nextDir)}'>" +
+    return "<a href='?sortField=${urlEncode(field)}&sortDir=${urlEncode(nextDir)}&page=1'>" +
            "${escapeHtml(label)}${indicator}</a>"
 }
 
@@ -670,6 +672,25 @@ def buildSelectionToggleLink(String filename, boolean selected = false) {
     def symbol = selected ? "&#9745;" : "&#9744;"
     def action = selected ? "Deselect" : "Select"
     return "<a href='?toggleFile=${urlEncode(filename)}' title='${action} ${escapeHtml(filename)}'>${symbol}</a>"
+}
+
+def buildPaginationBar(int currentPage, int pageCount, int totalFiles, int pageSize) {
+    if (pageCount <= 1) {
+        return "<small style='color:#777;'>Showing all ${totalFiles} file(s).</small>"
+    }
+    def prevLink = currentPage > 1
+        ? "<a href='?page=${currentPage - 1}'>&#8592; Previous</a>"
+        : "<span style='color:#aaa;'>&#8592; Previous</span>"
+    def nextLink = currentPage < pageCount
+        ? "<a href='?page=${currentPage + 1}'>Next &#8594;</a>"
+        : "<span style='color:#aaa;'>Next &#8594;</span>"
+    def start = ((currentPage - 1) * pageSize) + 1
+    def end   = Math.min(totalFiles, currentPage * pageSize)
+    return "<div style='display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#666;padding-top:6px;'>" +
+           "<span>${prevLink}</span>" +
+           "<span>Page ${currentPage} of ${pageCount} &nbsp;&#183;&nbsp; Showing ${start}-${end} of ${totalFiles}</span>" +
+           "<span>${nextLink}</span>" +
+           "</div>"
 }
 
 /**
@@ -712,6 +733,12 @@ def formatSize(Long bytes) {
 def formatDate(String dateStr) {
     if (!dateStr?.trim()) return "\u2014"
     try {
+        if (dateStr ==~ /^\d+$/) {
+            def epoch = dateStr as Long
+            if (dateStr.length() <= 10) epoch *= 1000L
+            def sdfEpoch = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm")
+            return sdfEpoch.format(new Date(epoch))
+        }
         def sdf1 = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
         def sdf2 = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm")
         return sdf2.format(sdf1.parse(dateStr))
@@ -761,6 +788,19 @@ def escapeHtml(String s) {
 
 def urlEncode(String s) {
     java.net.URLEncoder.encode(s ?: "", "UTF-8").replace("+", "%20")
+}
+
+def getPageSize() {
+    def maxRaw = (settings.maxFiles ?: 200) as int
+    return Math.max(10, Math.min(2000, maxRaw))
+}
+
+def safeInt(def raw, int fallback = 1) {
+    try {
+        return (raw ?: fallback) as int
+    } catch (ignored) {
+        return fallback
+    }
 }
 
 def getHubBaseUrl() {
